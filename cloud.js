@@ -9,6 +9,10 @@
   const EMAIL_DOMAIN = 'creepyfoxx.github.io';
   const CKEY = 'edh-tracker:cloud';
   const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+  const OAUTH_KEY = 'edh-tracker:oauthStarted';
+  // OAuth returns to the app's own start URL (inside the manifest scope, so iOS brings it back into the Home Screen app)
+  const APP_URL = new URL('./', location.href).href;
+  const AUTH_PARAMS = ['code', 'error', 'error_code', 'error_description', 'state', 'sb'];
 
   // a dead connection can leave requests hanging for minutes: give up after 15 s (the queue retries later)
   function timedFetch(input, init = {}) {
@@ -18,7 +22,9 @@
   }
   const sb = window.supabase && window.supabase.createClient
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'edh-tracker:auth' },
+      // PKCE: the code verifier stays in this app's localStorage, and the ?code= that Google/Supabase send back is
+      // exchanged for a session on load (detectSessionInUrl)
+      auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'edh-tracker:auth' },
       global: { fetch: timedFetch },
     })
     : null;
@@ -47,6 +53,8 @@
     if (/invalid invite code/i.test(m)) return 'Invite code not found.';
     if (/email not confirmed/i.test(m)) return 'This account is waiting for email confirmation (server setting). Ask the group admin.';
     if (/rate limit/i.test(m)) return 'Too many attempts — try again in a few minutes.';
+    if (/provider is not enabled|unsupported provider/i.test(m)) return 'Google sign-in is not enabled on the server yet.';
+    if (/access_denied|cancel/i.test(m)) return 'Sign-in was cancelled.';
     if (isNetErr(err)) return 'No connection — try again when online.';
     return m;
   }
@@ -66,13 +74,52 @@
   async function loadProfile(uid) {
     const { data, error } = await sb.from('profiles').select('id, username, display_name, color').eq('id', uid).single();
     if (error) throw error;
-    st.user = data; emit(); return data;
+    let providers = [], email = '';
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) { providers = (session.user.app_metadata && session.user.app_metadata.providers) || []; email = session.user.email || ''; }
+    } catch (e) { /* ignore */ }
+    st.user = { ...data, providers, email: providers.includes('google') ? email : '' }; emit(); return st.user;
+  }
+  // ---------- Google (OAuth, PKCE, same-window redirect) ----------
+  let googleEnabled = null;
+  async function googleAvailable() {
+    if (googleEnabled) return true; // only a positive answer is cached, so enabling it server-side works without reload
+    try {
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: SUPABASE_KEY } });
+      const j = await r.json(); googleEnabled = !!(j.external && j.external.google);
+    } catch (e) { return null; } // unknown (offline)
+    return googleEnabled;
+  }
+  async function googleAuthUrl() {
+    const { data, error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: APP_URL, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } } });
+    if (error) throw new Error(friendlyError(error));
+    return data.url;
+  }
+  async function signInWithGoogle() {
+    need(sb, 'Online features unavailable (offline?)');
+    need(online(), 'No connection — try again when online.');
+    const ok = await googleAvailable();
+    if (ok === false) throw new Error('Google sign-in is not enabled on the server yet.');
+    const url = await googleAuthUrl(); // stores the PKCE verifier in localStorage
+    localStorage.setItem(OAUTH_KEY, String(Date.now()));
+    // same window on purpose: in an iOS Home Screen app a popup/new window would open Safari (separate storage);
+    // a same-window navigation shows Google in an in-app sheet and the redirect back to APP_URL lands in the app
+    location.assign(url);
+    return url;
+  }
+  async function setPassword(pw) {
+    need(st.user && sb, 'Sign in first');
+    need(String(pw || '').length >= 6, 'Password must be at least 6 characters.');
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) throw new Error(friendlyError(error));
   }
   async function signIn(username, password) {
     need(sb, 'Online features unavailable (offline?)');
     const u = String(username || '').trim().toLowerCase();
-    need(USERNAME_RE.test(u), 'Username: 3–20 letters, numbers or _');
-    const { data, error } = await sb.auth.signInWithPassword({ email: `${u}@${EMAIL_DOMAIN}`, password });
+    const isEmail = u.includes('@'); // Google users who set an app password sign in with their Google email
+    need(isEmail || USERNAME_RE.test(u), 'Username: 3–20 letters, numbers or _ (or your email)');
+    const { data, error } = await sb.auth.signInWithPassword({ email: isEmail ? u : `${u}@${EMAIL_DOMAIN}`, password });
     if (error) throw new Error(friendlyError(error));
     await loadProfile(data.user.id);
     await refresh();
@@ -253,15 +300,35 @@
   function migrationKey(gid) { return `${st.user && st.user.id}:${gid}`; }
 
   // ---------- lifecycle ----------
+  // Returns what happened with an OAuth redirect on this load:
+  // { justSignedIn } | { error } | { wrongPlace } (a ?code= arrived but this app instance never started the sign-in:
+  // on iOS that means Google finished in Safari instead of the Home Screen app, or vice versa)
   async function init() {
-    if (!sb) return;
-    sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT' && st.user) { st = blank(); emit(); } });
+    if (!sb) return {};
+    const q = new URLSearchParams(location.search);
+    const hadCode = q.has('code'); const urlErr = q.get('error_description') || q.get('error');
+    const started = localStorage.getItem(OAUTH_KEY);
+    let initErr = null;
+    try { const r = await sb.auth.initialize(); initErr = r && r.error; } catch (e) { initErr = e; }
+    sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT' && st.user) { st = { ...blank(), migrated: st.migrated }; emit(); } });
+    const res = {};
+    let session = null;
+    try { session = (await sb.auth.getSession()).data.session; } catch (e) { /* offline */ }
+    if (hadCode || urlErr) {
+      const consumed = hadCode && !new URLSearchParams(location.search).has('code'); // supabase-js removes it after a successful exchange
+      if (consumed && session) res.justSignedIn = true;
+      else if (urlErr || initErr) res.error = friendlyError(urlErr || initErr);
+      else if (!session) res.wrongPlace = true;
+      localStorage.removeItem(OAUTH_KEY);
+      const u = new URL(location.href); AUTH_PARAMS.forEach((k) => u.searchParams.delete(k));
+      history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+    } else if (started && Date.now() - +started > 10 * 60000) localStorage.removeItem(OAUTH_KEY);
     try {
-      const { data: { session } } = await sb.auth.getSession();
-      if (session && (!st.user || st.user.id !== session.user.id) && online()) await loadProfile(session.user.id);
-      if (!session && st.user && online()) { st = blank(); emit(); return; }
-    } catch (e) { /* offline: keep cached user */ }
-    refresh();
+      if (session && (!st.user || st.user.id !== session.user.id || !st.user.providers) && online()) await loadProfile(session.user.id);
+      if (!session && st.user && online()) { st = { ...blank(), migrated: st.migrated }; emit(); return res; }
+    } catch (e) { if (res.justSignedIn) res.error = friendlyError(e); }
+    if (res.justSignedIn) await refresh(); else refresh();
+    return res;
   }
   window.addEventListener('online', () => refresh());
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
@@ -272,7 +339,7 @@
   window.EDHCloud = {
     available: !!sb, uuid, USERNAME_RE,
     on: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
-    init, refresh, sync, signIn, signUp, signOut, updateProfile,
+    init, refresh, sync, signIn, signUp, signOut, updateProfile, signInWithGoogle, googleAuthUrl, googleAvailable, setPassword, APP_URL,
     createGroup, joinGroup, leaveGroup, setGroup, saveDeck, deleteDeck, queueGame, deleteGame,
     user: () => st.user, groupId: () => (st.user ? st.groupId : null), groups: () => st.groups,
     group: () => st.groups.find((g) => g.id === st.groupId) || null,

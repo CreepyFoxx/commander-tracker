@@ -30,8 +30,12 @@ Optional. Without an account the app works exactly as before, 100% local.
 - Backend: Supabase project `uxfcidiqagswxkntymmh` (eu-central-1). `public/cloud.js` holds the URL and the **publishable** key
   (client-safe; every table is protected by Row Level Security). Never put a service_role/secret key in this repo.
 - supabase-js 2.117.2 is loaded from jsDelivr with an SRI hash; the service worker caches it so the app works offline.
-- Sign-in: username + password (the username is mapped to `<username>@creepyfoxx.github.io` internally; no email is sent).
-  Requires Supabase → Authentication → Sign In / Providers → Email → "Confirm email" = OFF.
+- Sign-in (v1.2.1): **Continue with Google** (Supabase OAuth, PKCE, same-window redirect back to the app URL, which is
+  inside the manifest scope so iOS returns to the Home Screen app). Needs: Google provider enabled with client ID/secret,
+  Google OAuth client redirect URI `https://uxfcidiqagswxkntymmh.supabase.co/auth/v1/callback`, and Supabase →
+  Authentication → URL Configuration: Site URL + Redirect URL `https://creepyfoxx.github.io/commander-tracker/**`.
+  Secondary: username/email + password ("Other options"; new username accounts need "Confirm email" OFF). Google users can
+  set an app password as a backup way in (sign in with their Google email).
 - Playgroups: create one in Settings, share the invite code or link (`?join=CODE`). Members see each other's decks, the
   group's games and stats. Guests (people without the app) are remembered per group and get their own stats.
 - Offline: finished games queue on the phone and upload automatically when the connection is back ("pending sync" pill).

@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.2.0';
+  const APP_VERSION = '1.2.1';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -903,15 +903,28 @@
   window.addEventListener('offline', requestRender);
 
   // ----- auth -----
-  function openAuth(mode = 'signin', opts = {}) {
+  const G_LOGO = '<svg class="g-logo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>';
+  async function startGoogle(errEl) {
+    try { await cloud.signInWithGoogle(); } // navigates away (same window) on success
+    catch (ex) { if (errEl) errEl.textContent = ex.message; else toast(ex.message); }
+  }
+  // mode: 'google' (default: Google first, username/password collapsed), 'signin' or 'signup' (classic form open)
+  function openAuth(mode = 'google', opts = {}) {
     if (!cloud) { toast('Online features need a connection the first time — try again when online.'); return; }
     let color = PROFILE_COLORS[rand(PROFILE_COLORS.length)];
-    const ov = openSheet(`<div class="sheet-head"><h2 data-role="title"></h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const classicOpen = mode !== 'google'; if (!classicOpen) mode = 'signin';
+    const ov = openSheet(`<div class="sheet-head"><h2>Sign in</h2><button class="icon-btn" data-close>${I.close}</button></div>
       <div class="sheet-body">
         ${opts.note ? `<div class="note-card">${opts.note}</div>` : ''}
+        <button class="btn google-btn big block" data-role="google">${G_LOGO}<span>Continue with Google</span></button>
+        <p class="muted small center">Your Google name becomes your display name (you can change it). Only your name and email are used.</p>
+        <div class="form-error center" data-role="gerr"></div>
+        <button class="link-btn more-btn" data-role="more" ${classicOpen ? 'hidden' : ''}>Other options: username & password</button>
+        <div data-role="classic" ${classicOpen ? '' : 'hidden'}>
+        <div class="or-sep"><span>or</span></div>
         <div class="seg auth-seg"><button data-mode="signin">Sign in</button><button data-mode="signup">Create account</button></div>
         <form data-role="form" autocomplete="on">
-          <div class="field"><label>Username</label><input type="text" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="20" placeholder="e.g. daniele" required></div>
+          <div class="field"><label data-role="ulabel">Username</label><input type="text" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="80" placeholder="e.g. daniele" required></div>
           <div class="field"><label>Password</label><input type="password" name="password" autocomplete="current-password" minlength="6" maxlength="72" placeholder="At least 6 characters" required></div>
           <div class="signup-only">
             <div class="field"><label>Display name <span class="muted">(shown to your group)</span></label><input type="text" name="display" maxlength="24" autocapitalize="words" placeholder="e.g. Daniele"></div>
@@ -921,13 +934,14 @@
           <div class="form-error" data-role="err"></div>
           <button class="btn primary big block" type="submit" data-role="submit"></button>
         </form>
-      </div>`, { cls: 'tall' });
+        </div>
+      </div>`, { cls: classicOpen ? 'tall' : '' });
     const form = ov.querySelector('[data-role=form]');
     const setMode = (m) => {
       mode = m;
       ov.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
       ov.querySelector('.signup-only').hidden = m !== 'signup';
-      ov.querySelector('[data-role=title]').textContent = m === 'signup' ? 'Create account' : 'Sign in';
+      ov.querySelector('[data-role=ulabel]').textContent = m === 'signup' ? 'Username' : 'Username (or email, if you set an app password)';
       ov.querySelector('[data-role=submit]').textContent = m === 'signup' ? 'Create account' : 'Sign in';
       form.password.autocomplete = m === 'signup' ? 'new-password' : 'current-password';
       ov.querySelector('[data-role=err]').textContent = '';
@@ -935,6 +949,8 @@
     const paintSwatches = () => ov.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('on', s.dataset.color === color));
     ov.addEventListener('click', (e) => {
       const m = e.target.closest('[data-mode]'); if (m) { setMode(m.dataset.mode); return; }
+      if (e.target.closest('[data-role=google]')) { startGoogle(ov.querySelector('[data-role=gerr]')); return; }
+      if (e.target.closest('[data-role=more]')) { ov.querySelector('[data-role=classic]').hidden = false; e.target.closest('[data-role=more]').hidden = true; return; }
       const s = e.target.closest('.swatch'); if (s) { color = s.dataset.color; paintSwatches(); }
     });
     form.addEventListener('submit', async (e) => {
@@ -959,9 +975,23 @@
     });
     setMode(mode); paintSwatches();
   }
-  function afterSignIn() {
+  // A Google redirect arrived in an app instance that didn't start it (no PKCE verifier here). On iPhone this happens
+  // when the sign-in finished in Safari instead of the Home Screen app (they don't share storage), or the reverse.
+  function oauthWrongPlace() {
+    const inSafari = isIOS && !isStandalone();
+    const ov = openSheet(`<div class="sheet-head"><h2>Almost there</h2><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sheet-body">
+        <p>Google sign-in finished ${inSafari ? 'in Safari instead of the Home Screen app' : 'in a different window than the one that started it'}, so it couldn't be completed here.</p>
+        <div class="note-card"><b>Fix:</b> ${inSafari ? 'close Safari, open Commander Tracker from your Home Screen and tap <b>Continue with Google</b> again.' : 'tap Continue with Google again in this window.'}
+        If it keeps happening: sign in with Google here, open Settings → <b>Set an app password</b>, then in the Home Screen app use <b>Other options</b> and sign in with your Google email + that password.</div>
+        <button class="btn google-btn big block" data-a="google">${G_LOGO}<span>Continue with Google here</span></button>
+        <div class="form-error center" data-role="gerr"></div>
+      </div>`);
+    ov.addEventListener('click', (e) => { if (e.target.closest('[data-a=google]')) startGoogle(ov.querySelector('[data-role=gerr]')); });
+  }
+  function afterSignIn(isNew) {
     if (pendingJoinCode()) { handlePendingJoin(); return; }
-    if (!cloud.groups().length) { setTab('settings'); toast('Create a playgroup or join one with an invite code'); return; }
+    if (!cloud.groups().length) { setTab('settings'); toast('Create a playgroup or join one with an invite code'); if (isNew) setTimeout(() => editProfile('Welcome! This is how your group will see you.'), 500); return; }
     maybeOfferMigration();
   }
 
@@ -981,12 +1011,15 @@
     if (!me()) {
       const ov = openSheet(`<div class="sheet-head"><h2>You're invited!</h2><button class="icon-btn" data-close>${I.close}</button></div>
         <div class="sheet-body"><p>Join the playgroup with invite code</p><div class="invite-code">${code}</div>
-        ${isIOS && !isStandalone() ? '<div class="note-card"><b>Tip:</b> first add this app to your Home Screen (Share → Add to Home Screen), open it from there, then create your account and enter this code in Settings → Join with code. The Home Screen app keeps its own sign-in.</div>' : ''}
-        <button class="btn primary big block" data-a="signup">Create account & join</button><button class="btn block" data-a="signin">I have an account</button>
+        ${isIOS && !isStandalone() ? '<div class="note-card"><b>Tip:</b> first add this app to your Home Screen (Share → Add to Home Screen), open it from there, sign in with Google and enter this code in Settings → Join with code. The Home Screen app keeps its own sign-in, separate from Safari.</div>' : ''}
+        <button class="btn google-btn big block" data-a="google">${G_LOGO}<span>Continue with Google & join</span></button>
+        <div class="form-error center" data-role="gerr"></div>
+        <button class="btn block" data-a="signin">Other sign-in options</button>
         <button class="btn ghost block" data-a="copy">Copy code</button></div>`, { cls: 'tall' });
       ov.addEventListener('click', async (e) => {
         const a = e.target.closest('[data-a]'); if (!a) return;
         if (a.dataset.a === 'copy') { try { await navigator.clipboard.writeText(code); toast('Code copied'); } catch (x) { toast(code); } return; }
+        if (a.dataset.a === 'google') { startGoogle(ov.querySelector('[data-role=gerr]')); return; } // join resumes after the redirect
         closeOverlay(ov); openAuth(a.dataset.a, { onDone: () => handlePendingJoin() });
       });
       return;
@@ -1005,14 +1038,16 @@
     if (!u) {
       return `<section class="card account-card"><div class="card-title">Playgroup (online)</div>
         <p class="muted small">Sign in so your friends can load their decks, and games & stats are shared with your playgroup. Without an account the app keeps working locally on this phone.</p>
-        <div class="row2"><button class="btn primary" data-act="authSignup">Create account</button><button class="btn" data-act="authSignin">Sign in</button></div>
+        <button class="btn google-btn block" data-act="authGoogle">${G_LOGO}<span>Continue with Google</span></button>
+        <button class="link-btn more-btn" data-act="authOther">Other options: username & password</button>
         ${pendingJoinCode() ? `<p class="small">Pending invite: <b>${esc(pendingJoinCode())}</b></p>` : ''}</section>`;
     }
     const groups = cloud.groups(); const g = cloud.group(); const pend = cloud.pending();
     return `<section class="card account-card"><div class="card-title">Account</div>
-        <div class="acct-row">${dot(u.color, 'lg')}<div class="grow"><b>${esc(u.display_name)}</b><div class="muted small">@${esc(u.username)}</div></div><button class="btn sm" data-act="editProfile">Edit</button></div>
+        <div class="acct-row">${dot(u.color, 'lg')}<div class="grow"><b>${esc(u.display_name)}</b><div class="muted small">${u.email ? `Google · ${esc(u.email)}` : '@' + esc(u.username)}</div></div><button class="btn sm" data-act="editProfile">Edit</button></div>
         <div class="sync-row"><span class="muted small">${pend ? `${pend} game${pend === 1 ? '' : 's'} waiting to upload` : cloud.lastSync() ? 'All games synced' : 'Synced'}${cloud.lastError() ? ` · <span class="err-text">${esc(cloud.lastError())}</span>` : ''}</span>
         <button class="btn sm ghost" data-act="syncNow">Sync now</button></div>
+        ${u.providers && u.providers.includes('google') ? '<button class="link-btn more-btn" data-act="setPassword">Set an app password (backup sign-in with your email)</button>' : ''}
         <button class="btn ghost block danger-text" data-act="signOut">Sign out</button>
       </section>
       <section class="card"><div class="card-title">Playgroup</div>
@@ -1031,7 +1066,7 @@
     return new Promise((resolve) => {
       let result = null;
       const ov = openSheet(`<div class="dialog-body"><h2>${esc(title)}</h2><div class="field"><label>${esc(label)}</label>
-        <input type="text" data-role="in" value="${esc(value)}" maxlength="${opts.max || 40}" ${opts.upper ? 'autocapitalize="characters" style="text-transform:uppercase;letter-spacing:.15em"' : 'autocapitalize="words"'} autocomplete="off"></div>
+        <input type="${opts.type || 'text'}" data-role="in" value="${esc(value)}" maxlength="${opts.max || 40}" ${opts.upper ? 'autocapitalize="characters" style="text-transform:uppercase;letter-spacing:.15em"' : 'autocapitalize="words"'} autocomplete="off"></div>
         <div class="dialog-actions"><button class="btn primary" data-role="ok">${esc(opts.ok || 'OK')}</button><button class="btn ghost" data-close>Cancel</button></div></div>`, { dialog: true, onClose: () => resolve(result) });
       const inp = ov.querySelector('[data-role=in]');
       const done = () => { result = inp.value.trim(); if (result) closeOverlay(ov); };
@@ -1040,9 +1075,9 @@
       setTimeout(() => inp.focus(), 250);
     });
   }
-  function editProfile() {
+  function editProfile(intro) {
     const u = me(); let color = u.color || PROFILE_COLORS[0];
-    const ov = openSheet(`<div class="dialog-body"><h2>Your profile</h2>
+    const ov = openSheet(`<div class="dialog-body"><h2>Your profile</h2>${intro ? `<p class="muted small">${esc(intro)}</p>` : ''}
       <div class="field"><label>Display name</label><input type="text" data-role="dn" value="${esc(u.display_name)}" maxlength="24"></div>
       <div class="field"><label>Color</label><div class="swatches">${PROFILE_COLORS.map((c) => `<button type="button" class="swatch" data-color="${c}" style="background:${c}"></button>`).join('')}</div></div>
       <div class="dialog-actions"><button class="btn primary" data-role="ok">Save</button><button class="btn ghost" data-close>Cancel</button></div></div>`, { dialog: true });
@@ -1383,8 +1418,15 @@
     // online playgroups
     pickSeatPlayer: (el) => openSeatPlayerPicker(+el.dataset.i),
     pickSeatDeck: (el) => openSeatDeckPicker(+el.dataset.i),
-    authSignin: () => openAuth('signin'),
+    authSignin: () => openAuth(),
     authSignup: () => openAuth('signup'),
+    authGoogle: () => startGoogle(),
+    authOther: () => openAuth('signin'),
+    setPassword: async () => {
+      const pw = await promptText('App password', `Lets you sign in with ${me().email || 'your email'} + this password, e.g. if Google sign-in doesn't return to the Home Screen app.`, '', { ok: 'Save password', type: 'password', max: 72 });
+      if (!pw) return;
+      try { await cloud.setPassword(pw); toast('Password saved — sign in with your Google email + password'); } catch (e) { toast(e.message); }
+    },
     goSettings: () => setTab('settings'),
     editProfile: () => editProfile(),
     statsScope: (el) => { statsScope = el.dataset.v; renderTab(); },
@@ -1532,7 +1574,14 @@
   captureJoinParam();
   renderTab();
   if (data.current) openGame();
-  if (cloud) cloud.init().then(() => { requestRender(); if (pendingJoinCode() && $('#game').hidden) handlePendingJoin(); });
+  if (cloud) cloud.init().then((res = {}) => {
+    requestRender();
+    if (!$('#game').hidden) return;
+    if (res.justSignedIn && me()) { toast(`Signed in as ${me().display_name}`); afterSignIn(true); return; }
+    if (res.error) { toast(res.error); openAuth('google', { note: esc(res.error) }); return; }
+    if (res.wrongPlace && !me()) { oauthWrongPlace(); return; }
+    if (pendingJoinCode()) handlePendingJoin();
+  });
   else if (pendingJoinCode()) toast('Connect to the internet to join the playgroup');
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     // Fallback when the SW can't navigate this window itself: reload once, after any open dialog closes.
