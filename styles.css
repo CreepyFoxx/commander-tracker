@@ -10,7 +10,10 @@ body {
   font: 15px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; touch-action: manipulation; overscroll-behavior: none; min-height: 100vh;
 }
-body.in-game { overflow: hidden; position: fixed; inset: 0; }
+body.in-game { overflow: hidden; position: fixed; inset: 0; background: #05060a; }
+html:has(body.in-game) { background: #05060a; }
+/* notch devices: guard against iOS standalone under-reporting the bottom inset */
+html.notch { --sab: max(env(safe-area-inset-bottom, 0px), 28px); }
 button, input, select { font: inherit; color: inherit; touch-action: manipulation; }
 button { cursor: pointer; border: 0; background: none; padding: 0; }
 svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -21,7 +24,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 /* ---------- app shell ---------- */
 #view { padding: calc(var(--sat) + 14px) calc(var(--sar) + 16px) calc(var(--sab) + 92px) calc(var(--sal) + 16px); max-width: 640px; margin: 0 auto; }
 #tabbar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: space-around;
+  position: fixed; left: 0; right: 0; bottom: calc(-1 * var(--vh-gap, 0px)); z-index: 20; display: flex; justify-content: space-around;
   padding: 6px calc(var(--sar) + 4px) calc(var(--sab) + 6px) calc(var(--sal) + 4px);
   background: rgba(13, 15, 23, .86); backdrop-filter: blur(18px) saturate(1.6); -webkit-backdrop-filter: blur(18px) saturate(1.6); border-top: 1px solid var(--line);
 }
@@ -108,7 +111,7 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(139, 108, 
 
 /* ---------- overlays / sheets ---------- */
 #overlay-root { position: relative; z-index: 50; }
-.overlay { position: fixed; inset: 0; container-type: size; }
+.overlay { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); container-type: size; }
 .backdrop { position: absolute; inset: 0; background: rgba(3, 4, 8, .6); opacity: 0; transition: opacity .2s; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
 .overlay.open .backdrop { opacity: 1; }
 .rot-frame { position: absolute; left: 50%; top: 50%; width: 100cqw; height: 100cqh; transform: translate(-50%, -50%) rotate(var(--rot, 0deg)); pointer-events: none; container-type: size; }
@@ -195,12 +198,11 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(139, 108, 
 .win-row.on .radio { border-color: var(--gold); background: radial-gradient(circle, var(--gold) 45%, transparent 50%); }
 
 /* ---------- game board ---------- */
-#game { position: fixed; inset: 0; background: #05060a; z-index: 10; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#game { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); background: #05060a; z-index: 10; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #board {
-  position: absolute; inset: 0; display: grid; gap: 5px; touch-action: none;
-  padding: max(var(--sat), 5px) max(var(--sar), 5px) max(var(--sab), 5px) max(var(--sal), 5px);
+  position: absolute; inset: 0; display: grid; gap: 4px; touch-action: none; padding: 0; /* edge to edge: safe areas are inner panel padding */
 }
-.cell { position: relative; container-type: size; overflow: hidden; border-radius: 20px; min-width: 0; min-height: 0; }
+.cell { position: relative; container-type: size; overflow: hidden; border-radius: 16px; min-width: 0; min-height: 0; }
 .panel {
   position: absolute; left: 50%; top: 50%; width: 100cqw; height: 100cqh; transform: translate(-50%, -50%) rotate(var(--rot)); container-type: size;
   background: radial-gradient(120% 90% at 50% 45%, var(--bg1), var(--bg2s)); overflow: hidden; transition: filter .3s;
@@ -210,13 +212,13 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(139, 108, 
 .zone { position: absolute; left: 0; right: 0; height: 50%; z-index: 1; transition: background .12s; }
 .zone.plus { top: 0; } .zone.minus { bottom: 0; }
 .zone.pressed { background: rgba(255, 255, 255, .07); }
-.p-head { position: absolute; top: 0; left: 0; right: 52px; padding: 9px 12px 0 14px; z-index: 2; pointer-events: none; min-width: 0; }
+.p-head { position: absolute; top: var(--pt, 0px); left: var(--pl, 0px); right: calc(52px + var(--pr, 0px)); padding: 9px 12px 0 14px; z-index: 2; pointer-events: none; min-width: 0; }
 .p-name { font-weight: 750; font-size: clamp(13px, 8cqh, 18px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
 .p-cmd { display: flex; align-items: center; gap: 6px; font-size: clamp(11px, 6cqh, 13px); color: rgba(255, 255, 255, .68); min-width: 0; }
 .p-cmd .pip { width: 9px; height: 9px; }
-.p-more { position: absolute; top: 6px; right: 6px; width: 44px; height: 40px; border-radius: 13px; z-index: 3; display: grid; place-items: center; background: rgba(0, 0, 0, .22); color: rgba(255, 255, 255, .85); }
+.p-more { position: absolute; top: calc(6px + var(--pt, 0px)); right: calc(6px + var(--pr, 0px)); width: 44px; height: 40px; border-radius: 13px; z-index: 3; display: grid; place-items: center; background: rgba(0, 0, 0, .22); color: rgba(255, 255, 255, .85); }
 .p-more svg { fill: currentColor; stroke: none; }
-.p-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: min(4cqw, 22px); z-index: 2; pointer-events: none; }
+.p-center { position: absolute; top: var(--pt, 0px); right: var(--pr, 0px); bottom: var(--pb, 0px); left: var(--pl, 0px); display: flex; align-items: center; justify-content: center; gap: min(4cqw, 22px); z-index: 2; pointer-events: none; }
 .lbtn { pointer-events: auto; width: min(58px, 15cqw, 30cqh); height: min(58px, 15cqw, 30cqh); border-radius: 50%; font-size: min(30px, 8cqw); font-weight: 500; line-height: 1; background: rgba(0, 0, 0, .18); color: rgba(255, 255, 255, .8); border: 1px solid rgba(255, 255, 255, .08); flex: none; }
 .lbtn.pressed { background: rgba(255, 255, 255, .18); transform: scale(.94); }
 .p-life-box { position: relative; min-width: 1.6em; text-align: center; font-size: min(46cqh, 30cqw); }
@@ -225,7 +227,7 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(139, 108, 
 .p-delta.show { opacity: 1; }
 .p-delta.neg { color: #ff8a94; }
 .panel.low .p-life { color: #ffb0b6; }
-.p-foot { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 8px 8px 10px; display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; z-index: 2; pointer-events: none; }
+.p-foot { position: absolute; left: var(--pl, 0px); right: var(--pr, 0px); bottom: var(--pb, 0px); padding: 0 8px 8px 10px; display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; z-index: 2; pointer-events: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .chip { pointer-events: auto; display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 8px; border-radius: 12px; background: rgba(0, 0, 0, .32); font-size: 12.5px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-s); }
@@ -235,11 +237,8 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(139, 108, 
 .chip.lethal { background: var(--danger); color: #fff; }
 .chip.poison { color: #9dff9d; } .chip.poison.warn { background: rgba(80, 200, 80, .3); }
 .chip.crown, .chip.init { color: var(--gold); }
-.p-endturn { pointer-events: auto; display: none; height: 32px; padding: 0 12px; border-radius: 16px; background: rgba(255, 255, 255, .9); color: #111; font-weight: 800; font-size: 13px; flex: none; }
-.panel.active .p-endturn { display: block; }
-.panel.active::before { box-shadow: inset 0 0 0 3px var(--accent-s), inset 0 0 30px -6px var(--accent-s); }
 .panel.picking::before { box-shadow: inset 0 0 0 4px #fff, inset 0 0 40px rgba(255, 255, 255, .35); }
-.p-dead { position: absolute; inset: 0; z-index: 2; pointer-events: none; display: none; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 12%; }
+.p-dead { position: absolute; inset: 0; z-index: 2; pointer-events: none; display: none; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: calc(12% + var(--pb, 0px)); }
 .panel.dead { filter: grayscale(.85) brightness(.6); }
 .panel.dead .p-dead { display: flex; }
 .panel.dead .p-life { opacity: .5; }
@@ -251,8 +250,8 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(139, 108, 
   display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05;
 }
 #center-btn:active { transform: translate(-50%, -50%) scale(.94); }
-.cb-turn { font-weight: 850; font-size: 17px; }
-.cb-clock { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cb-clock { font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; margin-top: 4px; }
+.cb-menu svg { width: 16px; height: 16px; fill: var(--muted); stroke: none; }
 #board.n2 #center-btn, #board.n3 #center-btn, #board.n5 #center-btn { top: 50%; }
 
 /* ---------- lists & stats ---------- */
@@ -313,9 +312,16 @@ body.in-game #toast.show { transform: translate(-50%, 44px); }
 
 /* keep panel content clear of the centre menu button */
 .near-tl .p-head { padding-left: 40px; }
-.near-tr .p-more { right: 42px; }
-.near-tr .p-head { right: 94px; }
+.near-tr .p-more { right: calc(42px + var(--pr, 0px)); }
+.near-tr .p-head { right: calc(94px + var(--pr, 0px)); }
 .near-bl .p-foot { padding-left: 42px; }
 .near-br .p-foot { padding-right: 42px; }
 .near-tc .p-head { right: calc(50% + 38px); }
 .near-bc .chips { max-width: calc(50% - 44px); }
+
+/* end-game turns question */
+.turns-q label { font-size: 16px; color: var(--text); font-weight: 700; margin-bottom: 8px; }
+.stepper { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.stepper .cbtn { width: 56px; height: 52px; font-size: 26px; border-radius: 14px; }
+.stepper input { flex: 1; height: 52px; text-align: center; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dur-field input { max-width: 160px; }

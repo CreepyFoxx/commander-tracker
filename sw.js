@@ -1,20 +1,29 @@
 /* Commander Tracker service worker: offline app shell, stale-while-revalidate. */
-const CACHE = 'edh-tracker-v1.0.0';
+const CACHE = 'edh-tracker-v1.1.0';
 const ASSETS = [
   './', 'index.html', 'styles.css', 'app.js', 'manifest.json',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: 'reload' bypasses the HTTP cache so a new version never precaches stale files
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))));
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    const old = (await caches.keys()).filter((k) => k !== CACHE);
+    await Promise.all(old.map((k) => caches.delete(k)));
+    await self.clients.claim();
+    if (!old.length) return; // first install: nothing stale on screen
+    // Upgrade: reload open windows once so they run the new version (game state is persisted in localStorage).
+    const wins = await self.clients.matchAll({ type: 'window' });
+    for (const c of wins) {
+      try { if ('navigate' in c) { await c.navigate(c.url); continue; } } catch (err) { /* fall through */ }
+      c.postMessage({ type: 'sw-updated' });
+    }
+  })());
 });
 
 self.addEventListener('fetch', (e) => {

@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '1.1.0';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -166,7 +166,7 @@
     const s = getSetup(); const g = data.current;
     v.innerHTML = `
     <header class="page-head"><div><div class="eyebrow">Commander Tracker</div><h1>New game</h1></div></header>
-    ${g ? `<div class="card resume"><div><b>Game in progress</b><div class="muted small">${g.players.length} players · Turn ${g.turn} · started ${fmtTime(g.startedAt)}</div></div>
+    ${g ? `<div class="card resume"><div><b>Game in progress</b><div class="muted small">${g.players.length} players · started ${fmtTime(g.startedAt)}</div></div>
       <div class="row"><button class="btn ghost sm" data-act="discardGame">Discard</button><button class="btn primary sm" data-act="resumeGame">Resume</button></div></div>` : ''}
     <section class="card">
       <div class="field"><label>Players</label><div class="seg">${[2, 3, 4, 5, 6].map((n) => `<button data-act="setCount" data-v="${n}" class="${s.count === n ? 'on' : ''}">${n}</button>`).join('')}</div></div>
@@ -240,7 +240,7 @@
         <div class="field"><label>Owner / player <span class="muted">(optional)</span></label><input type="text" data-f="owner" list="owner-names" value="${esc(st.owner)}" placeholder="Who plays this deck" autocapitalize="words" maxlength="40">
           <datalist id="owner-names">${knownPlayers().map((n) => `<option value="${esc(n)}">`).join('')}</datalist></div>
         ${stats ? `<div class="mini-stats"><div><b>${stats.games}</b><span>games</span></div><div><b>${stats.wins}</b><span>wins</span></div><div><b>${pct(stats.wins, stats.games)}</b><span>win rate</span></div><div><b>${fmtDur(stats.dur / stats.games)}</b><span>avg game</span></div></div>` : ''}
-        ${recent.length ? `<div class="sec-title">Recent games</div>${recent.map((g) => { const me = g.players.find((p) => p.commanderId === c.id); return `<div class="recent-row"><span>${fmtShort(g.endedAt)}</span><span class="ellipsis">${me.isWinner ? '🏆 Won' : ordinal(me.place || g.players.length)} · ${g.playerCount}p · T${g.turns}</span><span class="muted">${fmtDur(g.durationMs)}</span></div>`; }).join('')}` : ''}
+        ${recent.length ? `<div class="sec-title">Recent games</div>${recent.map((g) => { const me = g.players.find((p) => p.commanderId === c.id); return `<div class="recent-row"><span>${fmtShort(g.endedAt)}</span><span class="ellipsis">${me.isWinner ? '🏆 Won' : ordinal(me.place || g.players.length)} · ${g.playerCount}p${g.turns ? ' · T' + g.turns : ''}</span><span class="muted">${fmtDur(g.durationMs)}</span></div>`; }).join('')}` : ''}
         <div class="sheet-actions">${c ? '<button class="btn danger-text" data-a="delete">Delete</button>' : ''}<button class="btn primary grow" data-a="save">${c ? 'Save' : 'Add commander'}</button></div>
       </div>`, { cls: 'tall' });
     ov.addEventListener('click', async (e) => {
@@ -274,10 +274,10 @@
       return {
         id: 'p' + i, seat: i, name: seat.name.trim() || `Player ${i + 1}`,
         commanderId: c ? c.id : null, commanderName: c ? c.name : '', partnerName: c ? c.partner : '', colors: c ? c.colors.slice() : [],
-        life: s.life, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, elimTurn: null, killedBy: null,
+        life: s.life, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, killedBy: null,
       };
     });
-    data.current = { id: uid(), startedAt: Date.now(), startingLife: s.life, turn: 1, players, monarch: null, initiative: null, firstPlayerId: null, activeId: null };
+    data.current = { id: uid(), startedAt: Date.now(), startingLife: s.life, players, monarch: null, initiative: null, firstPlayerId: null };
     save(true);
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     openGame();
@@ -307,22 +307,29 @@
     $('#game').innerHTML = `<div id="board" class="n${g.players.length}" style="grid-template-rows:repeat(${L.rows},1fr);grid-template-columns:repeat(${L.cols},1fr)">
       ${g.players.map((p, i) => {
         const [r, c, span, rot] = L.seats[i];
-        return `<div class="cell" style="grid-area:${r}/${c}/span 1/span ${span}"><div class="panel seat-${p.seat} ${Math.abs(rot) === 90 ? 'side' : ''} ${nearClass(L, r, c, span, rot)}" style="--rot:${rot}deg" data-pid="${p.id}" data-rot="${rot}">
+        return `<div class="cell" style="grid-area:${r}/${c}/span 1/span ${span}"><div class="panel seat-${p.seat} ${Math.abs(rot) === 90 ? 'side' : ''} ${nearClass(L, r, c, span, rot)}" style="--rot:${rot}deg;${safePad(L, r, c, span, rot)}" data-pid="${p.id}" data-rot="${rot}">
           <div class="zone plus" data-d="1"></div><div class="zone minus" data-d="-1"></div>
           <div class="p-head"><div class="p-name"></div><div class="p-cmd"></div></div>
           <button class="p-more" data-act="playerSheet" aria-label="Commander damage & counters">${I.more}</button>
           <div class="p-center"><button class="lbtn" data-d="-1" aria-label="Lose life">−</button><div class="p-life-box"><div class="p-delta"></div><div class="p-life"></div></div><button class="lbtn" data-d="1" aria-label="Gain life">+</button></div>
-          <div class="p-foot"><div class="chips"></div><button class="p-endturn" data-act="endTurn">End turn ›</button></div>
+          <div class="p-foot"><div class="chips"></div></div>
           <div class="p-dead"><div class="skull">☠</div><div class="p-dead-txt"></div></div>
         </div></div>`;
       }).join('')}
-      <button id="center-btn" data-act="gameMenu" aria-label="Game menu"><span class="cb-turn"></span><span class="cb-clock"></span></button>
+      <button id="center-btn" data-act="gameMenu" aria-label="Game menu"><span class="cb-clock"></span><span class="cb-menu">${I.more}</span></button>
     </div>`;
     const board = $('#board');
     board.addEventListener('pointerdown', onPressStart);
     board.addEventListener('touchstart', (e) => { if (e.target.closest('[data-d]')) e.preventDefault(); }, { passive: false });
     board.addEventListener('contextmenu', (e) => e.preventDefault());
     updateAllPanels(); updateCenter();
+  }
+  // Safe-area insets become inner padding, mapped from screen edges to the panel's own (rotated) edges
+  function safePad(L, r, c, span, rot) {
+    const scr = { t: r === 1 ? 'var(--sat)' : '0px', b: r === L.rows ? 'var(--sab)' : '0px', l: c === 1 ? 'var(--sal)' : '0px', r: c - 1 + span === L.cols ? 'var(--sar)' : '0px' };
+    // player edge <- screen edge
+    const map = rot === 90 ? { t: 'r', r: 'b', b: 'l', l: 't' } : rot === -90 ? { t: 'l', r: 't', b: 'r', l: 'b' } : rot === 180 ? { t: 'b', r: 'l', b: 't', l: 'r' } : { t: 't', r: 'r', b: 'b', l: 'l' };
+    return `--pt:${scr[map.t]};--pr:${scr[map.r]};--pb:${scr[map.b]};--pl:${scr[map.l]}`;
   }
   // Which corner/edge of a panel (in the player's own orientation) touches the centre menu button
   function nearClass(L, r, c, span, rot) {
@@ -363,7 +370,6 @@
     el.querySelector('.p-life').textContent = p.life;
     el.classList.toggle('low', p.life <= 10 && !p.eliminated);
     el.classList.toggle('dead', p.eliminated);
-    el.classList.toggle('active', g.activeId === p.id);
     el.querySelector('.p-dead-txt').textContent = p.eliminated ? `Out · ${REASON[p.elimReason] || ''}` : '';
     el.querySelector('.chips').innerHTML = chipsHtml(p);
   }
@@ -382,7 +388,6 @@
   }
   function updateCenter() {
     const g = G(); const b = $('#center-btn'); if (!g || !b) return;
-    b.querySelector('.cb-turn').textContent = 'T' + g.turn;
     b.querySelector('.cb-clock').textContent = fmtClock(Date.now() - g.startedAt);
   }
   function bumpDelta(p, d) {
@@ -427,7 +432,7 @@
   }
   function eliminate(p, reason) {
     const g = G();
-    p.eliminated = true; p.elimReason = reason; p.elimTurn = g.turn;
+    p.eliminated = true; p.elimReason = reason;
     p.elimOrder = g.players.filter((x) => x.eliminated && x !== p).length + 1;
     setKiller(p);
     toast(`${p.name} is out (${REASON[reason]})`);
@@ -435,7 +440,7 @@
   }
   function revive(p) {
     const order = p.elimOrder;
-    Object.assign(p, { eliminated: false, elimReason: null, elimOrder: null, elimTurn: null, killedBy: null });
+    Object.assign(p, { eliminated: false, elimReason: null, elimOrder: null, killedBy: null });
     G().players.forEach((x) => { if (x.elimOrder && x.elimOrder > order) x.elimOrder--; });
     afterElimChange();
   }
@@ -452,27 +457,6 @@
     }
   }
 
-  function nextTurn() {
-    const g = G(); const ps = g.players;
-    if (!g.activeId) g.turn++;
-    else {
-      let idx = ps.findIndex((p) => p.id === g.activeId); const first = ps.findIndex((p) => p.id === g.firstPlayerId);
-      for (let k = 0; k < ps.length; k++) { idx = (idx + 1) % ps.length; if (idx === first) g.turn++; if (!ps[idx].eliminated) break; }
-      g.activeId = ps[idx].id;
-    }
-    updateAllPanels(); updateCenter(); refreshOverlays(); save();
-  }
-  function prevTurn() {
-    const g = G(); const ps = g.players;
-    if (!g.activeId) g.turn = Math.max(1, g.turn - 1);
-    else {
-      let idx = ps.findIndex((p) => p.id === g.activeId); const first = ps.findIndex((p) => p.id === g.firstPlayerId);
-      if (idx === first && g.turn === 1) return;
-      for (let k = 0; k < ps.length; k++) { if (idx === first) g.turn = Math.max(1, g.turn - 1); idx = (idx - 1 + ps.length) % ps.length; if (!ps[idx].eliminated) break; }
-      g.activeId = ps[idx].id;
-    }
-    updateAllPanels(); updateCenter(); refreshOverlays(); save();
-  }
   function pickFirstPlayer() {
     const g = G(); if (!g) return;
     const alive = g.players.filter((p) => !p.eliminated); if (!alive.length) return;
@@ -485,7 +469,7 @@
       const cur = alive[i % alive.length]; const el = panelEl(cur.id); if (el) el.classList.add('picking');
       if (i >= steps) {
         setTimeout(() => { if (el) el.classList.remove('picking'); }, 900);
-        g.firstPlayerId = winner.id; g.activeId = winner.id;
+        g.firstPlayerId = winner.id;
         updateAllPanels(); save(); toast(`🎲 ${winner.name} goes first!`); return;
       }
       i++; setTimeout(tick, 60 + i * 9);
@@ -540,16 +524,15 @@
         ${counterRow('<span class="cnt-ico">☣</span><div class="cnt-label"><b>Poison</b><small>10 = loss</small></div>', p.poison, 'data-pa="poison"', p.poison >= 10 ? 'lethal' : p.poison >= 7 ? 'warn' : '', 10)}
         ${taxRows}
         <div class="toggle-row"><button class="tbtn ${g.monarch === p.id ? 'on' : ''}" data-pa="monarch">👑 Monarch</button><button class="tbtn ${g.initiative === p.id ? 'on' : ''}" data-pa="initiative">🏰 Initiative</button></div>
-        ${p.eliminated ? `<div class="out-note">☠ Out ${ordinal(p.elimOrder)} · ${REASON[p.elimReason]} · turn ${p.elimTurn}</div>` : ''}
+        ${p.eliminated ? `<div class="out-note">☠ Out ${ordinal(p.elimOrder)} · ${REASON[p.elimReason]}</div>` : ''}
         <button class="btn block ${p.eliminated ? '' : 'danger-outline'}" data-pa="concede">${p.eliminated ? 'Revive player' : 'Concede / eliminate'}</button>
       </section></div>`;
   }
 
   function openGameMenu() {
     const g = G();
-    const ov = openSheet(`<div class="sheet-head"><div><h2>Turn <span data-role="turn"></span></h2><div class="muted small" data-role="sub"></div></div><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><div><h2>Game menu</h2><div class="muted small" data-role="sub"></div></div><button class="icon-btn" data-close>${I.close}</button></div>
       <div class="sheet-body">
-        <div class="row2"><button class="btn" data-ga="prev">‹ Prev turn</button><button class="btn primary" data-ga="next">Next turn ›</button></div>
         <div class="menu-grid">
           <button class="mtile" data-ga="first"><b>🎯</b><span>Random first player</span></button>
           <button class="mtile" data-ga="d6"><b>🎲</b><span>Roll d6</span></button>
@@ -562,25 +545,21 @@
       </div>`);
     const draw = () => {
       if (!G()) return;
-      ov.querySelector('[data-role=turn]').textContent = g.turn;
-      const act = g.activeId ? P(g.activeId) : null;
-      ov.querySelector('[data-role=sub]').textContent = `${fmtClock(Date.now() - g.startedAt)} elapsed${act ? ' · ' + act.name + "'s turn" : ''}`;
+      ov.querySelector('[data-role=sub]').textContent = `${fmtClock(Date.now() - g.startedAt)} elapsed · ${g.players.filter((p) => !p.eliminated).length} of ${g.players.length} players left`;
     };
     ov._refresh = draw; draw();
     ov.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-ga]'); if (!b) return;
       const a = b.dataset.ga;
-      if (a === 'next') nextTurn();
-      else if (a === 'prev') prevTurn();
-      else if (a === 'first') { closeOverlay(ov); pickFirstPlayer(); }
+      if (a === 'first') { closeOverlay(ov); pickFirstPlayer(); }
       else if (a === 'd6' || a === 'd20' || a === 'coin') showRoll(a);
       else if (a === 'end') { closeOverlay(ov); openEndGame(); }
       else if (a === 'exit') { closeOverlay(ov); closeGame(); }
       else if (a === 'restart') {
         if (!(await confirmDialog('Restart with the same players? Life and counters reset; this game is not saved.', 'Restart', true))) return;
         closeOverlay(ov);
-        g.players.forEach((p) => Object.assign(p, { life: g.startingLife, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, elimTurn: null, killedBy: null }));
-        Object.assign(g, { id: uid(), startedAt: Date.now(), turn: 1, monarch: null, initiative: null, activeId: g.firstPlayerId });
+        g.players.forEach((p) => Object.assign(p, { life: g.startingLife, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, killedBy: null }));
+        Object.assign(g, { id: uid(), startedAt: Date.now(), monarch: null, initiative: null });
         save(true); renderGame();
       } else if (a === 'abandon') {
         if (!(await confirmDialog('Abandon this game without saving it?', 'Abandon', true))) return;
@@ -604,8 +583,10 @@
     const mins = Math.max(1, Math.round((Date.now() - g.startedAt) / 60000));
     const ov = openSheet(`<div class="sheet-head"><h2>End game</h2><button class="icon-btn" data-close>${I.close}</button></div>
       <div class="sheet-body">
-        <div class="row2"><div class="field"><label>Duration (min)</label><input type="number" inputmode="numeric" min="1" max="1440" data-f="mins" value="${mins}"></div>
-        <div class="field"><label>Turns</label><input type="number" inputmode="numeric" min="1" max="999" data-f="turns" value="${g.turn}"></div></div>
+        <div class="field turns-q"><label>How many turns did the game take?</label>
+          <div class="stepper"><button class="cbtn" data-step="-1" aria-label="fewer turns">−</button><input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" data-f="turns" placeholder="?"><button class="cbtn plus" data-step="1" aria-label="more turns">+</button></div>
+          <div class="muted small">Leave blank if unknown.</div></div>
+        <div class="field dur-field"><label>Duration (minutes)</label><input type="number" inputmode="numeric" min="1" max="1440" data-f="mins" value="${mins}"></div>
         <div class="sec-title">Who won?</div><div class="win-list" data-role="list"></div>
         <button class="btn primary big block" data-role="save">Save game</button>
       </div>`, { cls: 'tall' });
@@ -620,13 +601,23 @@
       ov.querySelector('[data-role=save]').disabled = !winner;
     };
     list.addEventListener('click', (e) => { const b = e.target.closest('[data-w]'); if (!b) return; winner = b.dataset.w; draw(); });
+    const turnsIn = ov.querySelector('[data-f=turns]');
+    ov.querySelector('.stepper').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-step]'); if (!b) return;
+      const cur = parseInt(turnsIn.value, 10);
+      turnsIn.value = Number.isFinite(cur) ? Math.min(999, Math.max(1, cur + +b.dataset.step)) : typicalTurns();
+    });
     ov.querySelector('[data-role=save]').addEventListener('click', () => {
       if (!winner || !G()) return;
       const m = Math.max(1, parseInt(ov.querySelector('[data-f=mins]').value, 10) || mins);
-      const t = Math.max(1, parseInt(ov.querySelector('[data-f=turns]').value, 10) || g.turn);
+      const tv = parseInt(turnsIn.value, 10); const t = Number.isFinite(tv) && tv > 0 ? Math.min(999, tv) : null;
       closeOverlay(ov); saveGame(winner === 'draw' ? null : winner, m, t);
     });
     draw();
+  }
+  function typicalTurns() {
+    const ts = data.games.map((g) => g.turns).filter((t) => t > 0);
+    return ts.length ? Math.round(ts.reduce((a, b) => a + b, 0) / ts.length) : 8;
   }
   function saveGame(winnerId, mins, turns) {
     const g = G(); const winner = winnerId ? P(winnerId) : null;
@@ -639,7 +630,7 @@
       players: g.players.map((p) => ({
         name: p.name, commanderId: p.commanderId, commanderName: p.commanderName, partnerName: p.partnerName, colors: p.colors, seat: p.seat,
         finalLife: p.life, poison: p.poison, maxCmdTaken: Math.max(0, ...Object.values(p.cmd)), casts: p.tax[0] + p.tax[1],
-        eliminated: p.eliminated, elimOrder: p.elimOrder, elimReason: p.elimReason, elimTurn: p.elimTurn,
+        eliminated: p.eliminated, elimOrder: p.elimOrder, elimReason: p.elimReason,
         killedBy: p.killedBy ? idxOf(p.killedBy) : null, isWinner: p === winner, wentFirst: g.firstPlayerId === p.id, place: ranking.indexOf(p) + 1,
       })),
     };
@@ -650,7 +641,7 @@
     const w = rec.winnerIndex != null ? rec.players[rec.winnerIndex] : null;
     const ov = openSheet(`<div class="dialog-body center"><div class="trophy-big">🏆</div>
       <h2>${w ? esc(w.name) + ' wins!' : 'Draw'}</h2>${w && w.commanderName ? `<div class="muted"><span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}${w.partnerName ? ' + ' + esc(w.partnerName) : ''}</div>` : ''}
-      <div class="muted small">${fmtDur(rec.durationMs)} · ${rec.turns} turns · saved to history</div>
+      <div class="muted small">${fmtDur(rec.durationMs)}${rec.turns ? ` · ${rec.turns} turns` : ''} · saved to history</div>
       <div class="dialog-actions"><button class="btn primary" data-r="rematch">Rematch</button><button class="btn" data-r="stats">View stats</button><button class="btn ghost" data-close>Done</button></div></div>`, { dialog: true });
     ov.addEventListener('click', (e) => {
       const b = e.target.closest('[data-r]'); if (!b) return; closeOverlay(ov);
@@ -704,7 +695,8 @@
     }
     const n = games.length;
     const totalDur = games.reduce((a, g) => a + (g.durationMs || 0), 0);
-    const totalTurns = games.reduce((a, g) => a + (g.turns || 0), 0);
+    const turnGames = games.filter((g) => g.turns > 0);
+    const totalTurns = turnGames.reduce((a, g) => a + g.turns, 0);
     const totalPlayers = games.reduce((a, g) => a + g.playerCount, 0);
     const byCmd = new Map(); const byPlayer = new Map();
     const colorStats = Object.fromEntries(WUBRG.concat('C').map((c) => [c, { g: 0, w: 0 }]));
@@ -738,7 +730,7 @@
     const best = cmds.filter((c) => c.g >= minG).sort((a, b) => b.w / b.g - a.w / a.g || b.g - a.g)[0];
     const longest = games.reduce((a, g) => (g.durationMs > a.durationMs ? g : a), games[0]);
     const shortest = games.reduce((a, g) => (g.durationMs < a.durationMs ? g : a), games[0]);
-    const fastest = games.filter((g) => g.winnerIndex != null).reduce((a, g) => (!a || g.turns < a.turns ? g : a), null);
+    const fastest = games.filter((g) => g.winnerIndex != null && g.turns > 0).reduce((a, g) => (!a || g.turns < a.turns ? g : a), null);
     const bar = (label, pre, s) => `<div class="bar-row">${pre}<span class="bar-label">${label}</span><div class="bar"><i style="width:${s.g ? Math.round((s.w / s.g) * 100) : 0}%"></i></div><span class="bar-val">${pct(s.w, s.g)}<small>${s.w}/${s.g}</small></span></div>`;
     const avgP = totalPlayers / n;
     const reasonTotal = Object.values(reasons).reduce((a, b) => a + b, 0);
@@ -748,7 +740,7 @@
       <div class="tiles">
         <div class="tile"><b>${n}</b><span>games played</span></div>
         <div class="tile"><b>${fmtDur(totalDur / n)}</b><span>avg duration</span></div>
-        <div class="tile"><b>${(totalTurns / n).toFixed(1)}</b><span>avg turns</span></div>
+        <div class="tile"><b>${turnGames.length ? (totalTurns / turnGames.length).toFixed(1) : '—'}</b><span>avg turns</span></div>
         <div class="tile"><b>${fmtDur(totalDur)}</b><span>total time played</span></div>
         <div class="tile"><b>${avgP.toFixed(1)}</b><span>avg players</span></div>
         <div class="tile"><b>${firstGames ? pct(firstWins, firstGames) : '—'}</b><span>first-player win rate</span></div>
@@ -782,10 +774,10 @@
       ${data.games.length ? data.games.map((g) => {
         const ps = g.players.slice().sort((a, b) => (a.place || 99) - (b.place || 99));
         const w = g.winnerIndex != null ? g.players[g.winnerIndex] : null;
-        return `<div class="card game-card"><div class="gc-head"><div><b>${fmtDate(g.endedAt)}</b> <span class="muted small">${fmtTime(g.startedAt)}</span><div class="muted small">${g.playerCount} players · ${fmtDur(g.durationMs)} · ${g.turns} turns · ${g.startingLife} life</div></div>
+        return `<div class="card game-card"><div class="gc-head"><div><b>${fmtDate(g.endedAt)}</b> <span class="muted small">${fmtTime(g.startedAt)}</span><div class="muted small">${g.playerCount} players · ${fmtDur(g.durationMs)}${g.turns ? ` · ${g.turns} turns` : ''} · ${g.startingLife} life</div></div>
           <button class="icon-btn danger" data-act="deleteGame" data-id="${g.id}" aria-label="Delete game">${I.trash}</button></div>
           <div class="gc-winner">${w ? `🏆 <b>${esc(w.name)}</b> ${w.commanderName ? `<span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}` : ''}` : '<b>Draw</b>'}</div>
-          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis"><b>${esc(p.name)}</b> ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="muted small nowrap">${p.eliminated ? REASON[p.elimReason] + (p.elimTurn ? ' T' + p.elimTurn : '') : p.finalLife + ' ♥'}${p.wentFirst ? ' · went 1st' : ''}</span></div>`).join('')}</div></div>`;
+          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis"><b>${esc(p.name)}</b> ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="muted small nowrap">${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${p.wentFirst ? ' · went 1st' : ''}</span></div>`).join('')}</div></div>`;
       }).join('') : '<div class="empty"><div class="empty-ico">🕰️</div><p>No games yet.</p><p class="muted small">Saved games appear here. You can delete a wrong entry anytime.</p></div>'}`;
   }
 
@@ -807,7 +799,7 @@
       </section>
       <section class="card"><div class="card-title">Danger zone</div><button class="btn danger-outline block" data-act="wipeData">Delete all data</button></section>
       ${installHint()}
-      <p class="muted small center foot-note">Tap the top / bottom half of a panel for ±1, hold for ±10. Use ⋯ for commander damage, poison, tax, monarch & initiative. The centre button opens the game menu.</p>`;
+      <p class="muted small center foot-note">Tap the top / bottom half of a panel for ±1, hold for ±10. Use ⋯ for commander damage, poison, tax, monarch & initiative. The centre clock opens the game menu.</p>`;
   }
   function backupJson() {
     return JSON.stringify({ app: 'commander-tracker', version: 1, exportedAt: new Date().toISOString(), commanders: data.commanders, games: data.games, settings: data.settings, lastSetup: data.lastSetup, current: data.current }, null, 2);
@@ -873,7 +865,6 @@
       data = defaults(); save(true); renderTab(); toast('All data deleted');
     },
     playerSheet: (el) => { const panel = el.closest('.panel'); if (panel) openPlayerSheet(panel.dataset.pid); },
-    endTurn: () => nextTurn(),
     gameMenu: () => openGameMenu(),
   };
   document.addEventListener('click', (e) => {
@@ -907,11 +898,43 @@
     new MutationObserver(fit).observe($('#game'), { childList: true }); window.addEventListener('resize', fit);
   }
 
+  // ---------- viewport (iOS standalone reports a too-short innerHeight/100dvh when drawn under the status bar) ----------
+  const probe = document.createElement('div');
+  probe.id = 'sa-probe'; probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;top:0;left:0;padding-top:env(safe-area-inset-top,0px)';
+  document.documentElement.appendChild(probe);
+  function fitViewport() {
+    const root = document.documentElement; const standalone = isStandalone();
+    let h = window.innerHeight;
+    const sat = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    if (standalone && isIOS && sat > 0) {
+      const portrait = window.innerHeight >= window.innerWidth;
+      const full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+      if (full > h && full - h <= 140) h = full; // webview extends under status bar & home indicator: use the whole screen
+    }
+    root.style.setProperty('--app-h', h + 'px');
+    root.style.setProperty('--vh-gap', Math.max(0, h - window.innerHeight) + 'px');
+    root.classList.toggle('standalone', standalone);
+    root.classList.toggle('notch', sat > 0);
+  }
+  fitViewport();
+  window.addEventListener('resize', fitViewport);
+  window.addEventListener('orientationchange', () => setTimeout(fitViewport, 300));
+  window.addEventListener('pageshow', fitViewport);
+
   // ---------- boot ----------
   renderTab();
   if (data.current) openGame();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed', e)));
+    // Fallback when the SW can't navigate this window itself: reload once, after any open dialog closes.
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (!e.data || e.data.type !== 'sw-updated') return;
+      save(true);
+      const go = () => { if ($('.overlay')) setTimeout(go, 1500); else location.reload(); };
+      go();
+    });
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then((reg) => {
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch((e) => console.warn('SW registration failed', e)));
   }
   window.__edh = { get data() { return data; } }; // debug/test hook
 })();
