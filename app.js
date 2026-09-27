@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.4.1';
+  const APP_VERSION = '1.5.0';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -41,6 +41,7 @@
     history: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     skull: '<svg viewBox="0 0 24 24"><path d="M12 3C7.6 3 4.5 6.1 4.5 10.2c0 2.4 1.1 4.2 2.8 5.3V19a1 1 0 0 0 1 1h7.4a1 1 0 0 0 1-1v-3.5c1.7-1.1 2.8-2.9 2.8-5.3C19.5 6.1 16.4 3 12 3z"/><circle cx="9.2" cy="11" r="1.6" fill="currentColor"/><circle cx="14.8" cy="11" r="1.6" fill="currentColor"/><path d="M10.5 20v-2.5M13.5 20v-2.5"/></svg>',
     flag: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4.5c4-2.5 7 2.5 13 0v9c-6 2.5-9-2.5-13 0"/></svg>',
+    solring: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="14.5" rx="8" ry="5.8"/><ellipse cx="12" cy="14.5" rx="4.2" ry="2.6"/><path d="M12 3.2l2.3 3.1L12 8.7 9.7 6.3z"/></svg>',
   };
   // commander colour identity as a CSS gradient (deck accent strips, commander bars)
   const MANA_HEX = { W: '#f6efd2', U: '#3f8fe6', B: '#a594ad', R: '#ee5a40', G: '#2fb266', C: '#b8bbc9' };
@@ -111,6 +112,11 @@
   const fmtTime = (ts) => new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const pct = (w, g) => (g ? Math.round((w / g) * 100) + '%' : '—');
   const ordinal = (n) => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
+  // Turn order (v1.5): seats are listed clockwise and play passes clockwise, so a seat's position is its distance from the
+  // first player + 1. Returns [position of seat 0, position of seat 1, ...] (1..n).
+  const turnPositions = (n, first) => Array.from({ length: n }, (_, i) => ((i - first + n) % n) + 1);
+  const hasTurnPos = (g) => g.players.every((p) => Number.isInteger(p.turnPos) && p.turnPos >= 1 && p.turnPos <= g.players.length);
+  const hasSolRing = (g) => g.players.every((p) => typeof p.solRingT1 === 'boolean');
   function pips(colors) {
     if (!colors || !colors.length) return '<span class="pip pip-C"></span>';
     return colors.map((c) => `<span class="pip pip-${c}"></span>`).join('');
@@ -172,6 +178,7 @@
   let tab = 'play';
   let cmdSort = 'games';
   let statsScope = 'group';
+  let posSize = null; let posBy = 'players'; let solBy = 'players'; // v1.5 stats view state (null = most common pod size)
   function renderTab() {
     $$('#tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     const v = $('#view'); v.dataset.tab = tab;
@@ -274,8 +281,8 @@
         <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="${st.colors.includes(x)}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
         <div class="field"><label>Owner / player <span class="muted">(optional)</span></label><input type="text" data-f="owner" list="owner-names" value="${esc(st.owner)}" placeholder="Who plays this deck" autocapitalize="words" maxlength="40">
           <datalist id="owner-names">${knownPlayers().map((n) => `<option value="${esc(n)}">`).join('')}</datalist></div>
-        ${stats ? `<div class="mini-stats"><div><b>${stats.games}</b><span>games</span></div><div><b>${stats.wins}</b><span>wins</span></div><div><b>${pct(stats.wins, stats.games)}</b><span>win rate</span></div><div><b>${fmtDur(stats.dur / stats.games)}</b><span>avg game</span></div></div>` : ''}
-        ${recent.length ? `<div class="sec-title">Recent games</div>${recent.map((g) => { const me = g.players.find((p) => p.commanderId === c.id); return `<div class="recent-row"><span>${fmtShort(g.endedAt)}</span><span class="ellipsis">${me.isWinner ? '🏆 Won' : ordinal(me.place || g.players.length)} · ${g.playerCount}p${g.turns ? ' · T' + g.turns : ''}</span><span class="muted">${fmtDur(g.durationMs)}</span></div>`; }).join('')}` : ''}
+        ${stats ? `<div class="mini-stats"><div><b>${stats.games}</b><span>games</span></div><div><b>${stats.wins}</b><span>wins</span></div><div><b>${pct(stats.wins, stats.games)}</b><span>win rate</span></div><div><b>${fmtDur(stats.dur / stats.games)}</b><span>avg game</span></div></div>${cmdTurnHtml(stats)}` : ''}
+        ${recent.length ? `<div class="sec-title">Recent games</div>${recent.map((g) => { const me = g.players.find((p) => p.commanderId === c.id); return `<div class="recent-row"><span>${fmtShort(g.endedAt)}</span><span class="ellipsis">${me.isWinner ? '🏆 Won' : ordinal(me.place || g.players.length)} · ${g.playerCount}p${g.turns ? ' · T' + g.turns : ''}${Number.isInteger(me.turnPos) ? ' · ' + ordinal(me.turnPos) + ' to play' : ''}${me.solRingT1 ? ' · T1 Sol Ring' : ''}</span><span class="muted">${fmtDur(g.durationMs)}</span></div>`; }).join('')}` : ''}
         <div class="sheet-actions">${c ? '<button class="btn danger-text" data-a="delete">Delete</button>' : ''}<button class="btn primary grow" data-a="save">${c ? 'Save' : 'Add commander'}</button></div>
       </div>`, { cls: 'tall' });
     ov.addEventListener('click', async (e) => {
@@ -427,6 +434,7 @@
     if (p.tax[0] || p.tax[1]) out.push(`<span class="chip tax" data-act="playerSheet">${I.cycle}<span class="lbl">Tax </span>+${p.tax[0] * 2}${p.partnerName ? '/+' + p.tax[1] * 2 : ''}</span>`);
     if (g.monarch === p.id) out.push(`<span class="chip crown">${I.crown}<span class="lbl">Monarch</span></span>`);
     if (g.initiative === p.id) out.push(`<span class="chip init">${I.castle}<span class="lbl">Initiative</span></span>`);
+    if (p.solRing) out.push(`<span class="chip sol" data-act="playerSheet" role="img" aria-label="Turn 1 Sol Ring">${I.solring}<span class="lbl">Sol Ring</span></span>`);
     return out.join('');
   }
   function updateCenter() {
@@ -537,6 +545,7 @@
       else if (a === 'tax') changeTax(p, +b.dataset.i, d);
       else if (a === 'life') changeLife(p.id, d);
       else if (a === 'monarch' || a === 'initiative') { g[a] = g[a] === p.id ? null : p.id; updateAllPanels(); save(); }
+      else if (a === 'solring') { p.solRing = !p.solRing; updatePanel(p); save(); }
       else if (a === 'concede') {
         if (p.eliminated) {
           if (lossReason(p)) { toast('Still lethal — fix life / damage / poison first'); return; }
@@ -567,7 +576,8 @@
         ${counterRow(`<span class="cnt-ico life">${I.heart}</span><div class="cnt-label"><b>Life</b><small>adjust by 1</small></div>`, p.life, 'data-pa="life"')}
         ${counterRow(`<span class="cnt-ico poison">${I.poison}</span><div class="cnt-label"><b>Poison</b><small>10 = loss</small></div>`, p.poison, 'data-pa="poison"', p.poison >= 10 ? 'lethal' : p.poison >= 7 ? 'warn' : '', 10)}
         ${taxRows}
-        <div class="toggle-row"><button class="tbtn ${g.monarch === p.id ? 'on' : ''}" data-pa="monarch">${I.crown}Monarch</button><button class="tbtn ${g.initiative === p.id ? 'on' : ''}" data-pa="initiative">${I.castle}Initiative</button></div>
+        <div class="toggle-row three"><button class="tbtn ${g.monarch === p.id ? 'on' : ''}" data-pa="monarch" aria-pressed="${g.monarch === p.id}">${I.crown}Monarch</button><button class="tbtn ${g.initiative === p.id ? 'on' : ''}" data-pa="initiative" aria-pressed="${g.initiative === p.id}">${I.castle}Initiative</button>
+          <button class="tbtn sol ${p.solRing ? 'on' : ''}" data-pa="solring" aria-pressed="${!!p.solRing}" aria-label="Turn 1 Sol Ring">${I.solring}T1 Sol Ring</button></div>
         ${p.eliminated ? `<div class="out-note">☠ Out ${ordinal(p.elimOrder)} · ${REASON[p.elimReason]}</div>` : ''}
         <button class="btn block ${p.eliminated ? '' : 'danger-outline'}" data-pa="concede">${p.eliminated ? 'Revive player' : 'Concede / eliminate'}</button>
       </section></div>`;
@@ -603,7 +613,7 @@
       else if (a === 'restart') {
         if (!(await confirmDialog('Restart with the same players? Life and counters reset; this game is not saved.', 'Restart', true))) return;
         closeOverlay(ov);
-        g.players.forEach((p) => Object.assign(p, { life: g.startingLife, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, killedBy: null }));
+        g.players.forEach((p) => Object.assign(p, { life: g.startingLife, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, killedBy: null, solRing: false }));
         Object.assign(g, { id: uid(), startedAt: Date.now(), monarch: null, initiative: null, firstPlayerId: null });
         clearTimeout(winnerPromptTimer); Object.values(deltas).forEach((x) => clearTimeout(x.t)); Object.keys(deltas).forEach((k) => delete deltas[k]);
         save(true); renderGame();
@@ -635,6 +645,9 @@
           <div class="muted small">Leave blank if unknown.</div></div>
         <div class="field dur-field"><label>Duration (minutes)</label><input type="number" inputmode="numeric" min="1" max="1440" data-f="mins" value="${mins}"></div>
         <div class="sec-title">Who won?</div><div class="win-list" data-role="list"></div>
+        <div class="sec-title">Turn order</div><div class="to-list" data-role="order"></div>
+        <p class="hint" data-role="order-hint"></p>
+        <div class="sec-title">Turn 1 Sol Ring?</div><div class="sol-list" data-role="sol"></div>
         <button class="btn primary big block" data-role="save">Save game</button>
       </div>`, { cls: 'tall' });
     ov.classList.add('end-open');
@@ -648,6 +661,26 @@
       ov.querySelector('[data-role=save]').disabled = !winner;
     };
     list.addEventListener('click', (e) => { const b = e.target.closest('[data-w]'); if (!b) return; winner = b.dataset.w; draw(); });
+    // turn order: who went first (random pick / chosen in game, else seat 1) -> everyone else follows clockwise
+    const picked = g.players.findIndex((p) => p.id === g.firstPlayerId);
+    let first = picked >= 0 ? picked : 0; let chosen = picked >= 0;
+    const orderEl = ov.querySelector('[data-role=order]'); const solEl = ov.querySelector('[data-role=sol]');
+    const drawOrder = () => {
+      const pos = turnPositions(g.players.length, first);
+      const byPos = g.players.map((p, i) => ({ p, i, pos: pos[i] })).sort((a, b) => a.pos - b.pos);
+      orderEl.innerHTML = byPos.map(({ p, i, pos: k }) => `<button class="to-chip ${k === 1 ? 'on' : ''}" data-first="${i}" aria-pressed="${k === 1}" aria-label="${esc(p.name)}: ${ordinal(k)} to play${k === 1 ? ' (went first)' : ' — tap if they went first'}"><span class="to-pos">${ordinal(k)}</span><span class="seat-dot sm seat-${p.seat}"></span><span class="ellipsis">${esc(p.name)}</span></button>`).join('');
+      ov.querySelector('[data-role=order-hint]').textContent = chosen ? 'Tap who went first — the others follow clockwise.' : 'No first player was picked, so seat 1 is assumed. Tap who went first — the others follow clockwise.';
+      solEl.innerHTML = byPos.map(({ p }) => `<button class="sol-chip ${p.solRing ? 'on' : ''}" data-sol="${p.id}" aria-pressed="${!!p.solRing}">${I.solring}<span class="ellipsis">${esc(p.name)}</span></button>`).join('');
+    };
+    orderEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-first]'); if (!b) return;
+      first = +b.dataset.first; chosen = true; g.firstPlayerId = g.players[first].id; save(); drawOrder(); // kept if the dialog is closed and reopened
+    });
+    solEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-sol]'); if (!b) return; const p = P(b.dataset.sol); if (!p) return;
+      p.solRing = !p.solRing; updatePanel(p); save(); drawOrder();
+    });
+    drawOrder();
     const turnsIn = ov.querySelector('[data-f=turns]');
     ov.querySelector('.stepper').addEventListener('click', (e) => {
       const b = e.target.closest('[data-step]'); if (!b) return;
@@ -658,7 +691,7 @@
       if (!winner || !G()) return;
       const m = Math.max(1, parseInt(ov.querySelector('[data-f=mins]').value, 10) || mins);
       const tv = parseInt(turnsIn.value, 10); const t = Number.isFinite(tv) && tv > 0 ? Math.min(999, tv) : null;
-      closeOverlay(ov); saveGame(winner === 'draw' ? null : winner, m, t);
+      closeOverlay(ov); saveGame(winner === 'draw' ? null : winner, m, t, first);
     });
     draw();
   }
@@ -666,19 +699,21 @@
     const ts = data.games.map((g) => g.turns).filter((t) => t > 0);
     return ts.length ? Math.round(ts.reduce((a, b) => a + b, 0) / ts.length) : 8;
   }
-  function saveGame(winnerId, mins, turns) {
+  function saveGame(winnerId, mins, turns, first = 0) {
     const g = G(); const winner = winnerId ? P(winnerId) : null;
+    const pos = turnPositions(g.players.length, first);
     const rest = g.players.filter((p) => p !== winner);
     const ranking = [...(winner ? [winner] : []), ...rest.filter((p) => !p.eliminated), ...rest.filter((p) => p.eliminated).sort((a, b) => b.elimOrder - a.elimOrder)];
     const idxOf = (pid) => g.players.findIndex((x) => x.id === pid);
     const rec = {
       id: g.id, startedAt: g.startedAt, endedAt: Date.now(), durationMs: mins * 60000, turns, startingLife: g.startingLife,
-      playerCount: g.players.length, winnerIndex: winner ? idxOf(winner.id) : null,
-      players: g.players.map((p) => ({
+      playerCount: g.players.length, winnerIndex: winner ? idxOf(winner.id) : null, firstPlayerIndex: first,
+      players: g.players.map((p, i) => ({
         name: p.name, commanderId: p.commanderId, commanderName: p.commanderName, partnerName: p.partnerName, colors: p.colors, seat: p.seat,
         finalLife: p.life, poison: p.poison, maxCmdTaken: Math.max(0, ...Object.values(p.cmd)), casts: p.tax[0] + p.tax[1],
         eliminated: p.eliminated, elimOrder: p.elimOrder, elimReason: p.elimReason,
-        killedBy: p.killedBy ? idxOf(p.killedBy) : null, isWinner: p === winner, wentFirst: g.firstPlayerId === p.id, place: ranking.indexOf(p) + 1,
+        killedBy: p.killedBy ? idxOf(p.killedBy) : null, isWinner: p === winner, wentFirst: pos[i] === 1, place: ranking.indexOf(p) + 1,
+        turnPos: pos[i], solRingT1: !!p.solRing, // v1.5
         ...(g.groupId ? { kind: p.kind, userId: p.userId || null, guestId: p.guestId || null, deckId: p.deckId || null } : {}),
       })),
     };
@@ -711,12 +746,22 @@
       g.players.forEach((p) => {
         if (!p.commanderId) return;
         let s = m.get(p.commanderId);
-        if (!s) { s = { games: 0, wins: 0, dur: 0, turns: 0, last: 0, placeSum: 0, kills: 0 }; m.set(p.commanderId, s); }
+        if (!s) { s = { games: 0, wins: 0, dur: 0, turns: 0, last: 0, placeSum: 0, kills: 0, pos: [], posG: 0, solG: 0, sr: { g: 0, w: 0 } }; m.set(p.commanderId, s); }
         s.games++; if (p.isWinner) s.wins++; s.dur += g.durationMs || 0; s.turns += g.turns || 0; s.last = Math.max(s.last, g.endedAt); s.placeSum += p.place || 0;
+        if (hasTurnPos(g)) { const x = s.pos[p.turnPos - 1] || (s.pos[p.turnPos - 1] = { g: 0, w: 0 }); x.g++; if (p.isWinner) x.w++; s.posG++; }
+        if (hasSolRing(g)) { s.solG++; if (p.solRingT1) { s.sr.g++; if (p.isWinner) s.sr.w++; } }
       });
       g.players.forEach((p) => { if (p.killedBy != null && g.players[p.killedBy]) { const k = m.get(g.players[p.killedBy].commanderId); if (k) k.kills++; } });
     }
     return m;
+  }
+  // commander / deck detail (v1.5): win rate per turn position (all pod sizes) + turn-1 Sol Ring
+  function cmdTurnHtml(s) {
+    if (!s || (!s.posG && !s.solG)) return '';
+    const cells = Array.from(s.pos, (x, i) => (x && x.g ? `<span class="tp-cell"><small>${ordinal(i + 1)}</small><b>${pct(x.w, x.g)}</b><small>${x.w}/${x.g}</small></span>` : '')).join('');
+    return `<div class="cmd-turn">${s.posG ? `<div class="ct-row"><span class="ct-lbl">${I.play}By turn position</span><div class="tp-cells">${cells}</div></div>` : ''}
+      ${s.solG ? `<div class="ct-row"><span class="ct-lbl">${I.solring}Turn 1 Sol Ring</span><span class="ct-v"><b>${s.sr.g}</b> of ${s.solG} game${s.solG === 1 ? '' : 's'}${s.sr.g ? ` · won ${s.sr.w} (${pct(s.sr.w, s.sr.g)})` : ''}</span></div>` : ''}
+      ${s.posG < s.games || s.solG < s.games ? '<p class="stat-note">Games saved before v1.5 aren’t counted here.</p>' : ''}</div>`;
   }
   // circular win-rate ring for commander/deck cards (text stays "NN%" / "—")
   function wrRing(s) {
@@ -807,6 +852,7 @@
     const players = [...byPlayer.values()].sort((a, b) => b.g - a.g || b.w - a.w);
     const topPlayer = players.length > 1 ? players.filter((p) => p.w > 0).sort((a, b) => b.w / b.g - a.w / a.g || b.g - a.g)[0] : null;
     const winnerOf = (g) => g.players[g.winnerIndex];
+    const extra = turnStatsHtml(games, countP, meMode);
     v.innerHTML = `${statsHead()}
       <div class="tiles">
         <div class="tile t-violet"><i class="t-ico">${I.chart}</i><b>${n}</b><span>games played</span></div>
@@ -828,6 +874,7 @@
         <div class="ptable"><div class="pt-head"><span>Player</span><span>G</span><span>W</span><span>Win%</span><span>Avg pl.</span></div>
         ${players.map((p) => { const fav = [...p.cmds.entries()].sort((a, b) => b[1] - a[1])[0]; return `<div class="pt-row ${p === topPlayer ? 'top' : ''}"><span class="pt-name"><b>${esc(p.name)}${p.guest ? ' <span class="guest-tag">Guest</span>' : ''}</b>${fav ? `<small>${esc(fav[0])}</small>` : ''}<span class="pt-bar"><i style="width:${Math.round((p.w / p.g) * 100)}%"></i></span></span><span>${p.g}</span><span>${p.w}</span><span class="acc">${pct(p.w, p.g)}</span><span>${(p.placeSum / p.g).toFixed(1)}</span></div>`; }).join('')}</div>
       </section>
+      ${extra}
       ${cmds.length ? `<section class="card"><div class="card-title">Win rate by color <span class="muted small">baseline ≈ ${Math.round(100 / avgP)}%</span></div>
         ${WUBRG.concat('C').map((c) => bar(COLOR_NAME[c], `<span class="pip pip-${c}"></span>`, colorStats[c], `mana pip-${c}`)).join('')}
         ${baseNote}
@@ -843,6 +890,91 @@
       </section>` : ''}
       </div>`;
   }
+  // ----- v1.5: win rate by turn position + turn-1 Sol Ring. Only games saved with that data count (older ones lack it).
+  function turnStatsHtml(games, countP, meMode) {
+    const posGames = games.filter(hasTurnPos); const solGames = games.filter(hasSolRing);
+    if (!posGames.length && !solGames.length) {
+      return `<section class="card new-card"><div class="card-title"><span class="ct-ico">${I.play}</span>Turn order & Sol Ring</div>
+        <p class="muted small">On the End game screen, pick who went first and tick any turn-1 Sol Rings. Win rate by turn position and Sol Ring stats show up here from your next saved game. Games saved before this update aren’t counted.</p></section>`;
+    }
+    const cmdKey = (p) => { const label = p.partnerName ? `${p.commanderName} + ${p.partnerName}` : p.commanderName; return p.commanderId || 'name:' + label.toLowerCase(); };
+    const cmdInfo = (p) => { const live = cmdLookup(p.commanderId); return { label: live ? cmdLabel(live) : (p.partnerName ? `${p.commanderName} + ${p.partnerName}` : p.commanderName), colors: live ? live.colors : p.colors || [] }; };
+    const note = (k) => (k < games.length ? `<p class="stat-note">Based on ${k} of ${games.length} game${games.length === 1 ? '' : 's'} — games saved before this update aren’t counted.</p>` : '');
+    const rate = (s) => (s.g ? Math.round((s.w / s.g) * 100) : 0);
+    const pbar = (label, pre, s, base, cls = '') => `<div class="bar-row"><span class="bar-label">${pre}<span class="ellipsis">${label}</span></span><div class="bar ${cls}" style="--base:${base}%"><i style="width:${rate(s)}%"></i></div><span class="bar-val">${pct(s.w, s.g)}<small>${s.w}/${s.g}</small></span></div>`;
+    const bySeg = (act, cur) => (meMode ? '' : `<div class="seg small-seg sub-seg">${[['players', 'Players'], ['cmds', 'Commanders']].map(([k, l]) => `<button data-act="${act}" data-v="${k}" class="${cur === k ? 'on' : ''}">${l}</button>`).join('')}</div>`);
+    const nameCell = (e) => `<span class="xt-name">${e.pips != null ? `<span class="pips">${pips(e.pips)}</span>` : ''}<span class="ellipsis">${esc(e.label)}${e.guest ? ' <span class="guest-tag">Guest</span>' : ''}</span></span>`;
+    let html = '';
+    // --- win rate by turn position
+    if (posGames.length) {
+      const count = (n) => posGames.filter((g) => g.players.length === n).length;
+      const sizes = [...new Set(posGames.map((g) => g.players.length))].sort((a, b) => a - b);
+      const defSize = sizes.slice().sort((a, b) => count(b) - count(a) || Math.abs(a - 4) - Math.abs(b - 4))[0];
+      const size = posSize === 'all' && sizes.length > 1 ? 'all' : sizes.includes(posSize) ? posSize : defSize;
+      const pg = size === 'all' ? posGames : posGames.filter((g) => g.players.length === size);
+      const maxPos = size === 'all' ? sizes[sizes.length - 1] : size;
+      const blank = () => Array.from({ length: maxPos }, () => ({ g: 0, w: 0 }));
+      const all = blank(); const rows = new Map(); const useCmd = meMode || posBy === 'cmds';
+      pg.forEach((g) => g.players.forEach((p) => {
+        if (!countP(p)) return;
+        const c = all[p.turnPos - 1]; c.g++; if (p.isWinner) c.w++;
+        if (useCmd && !p.commanderName) return;
+        const k = useCmd ? cmdKey(p) : pKey(p);
+        let e = rows.get(k);
+        if (!e) { const ci = useCmd ? cmdInfo(p) : null; e = { label: ci ? ci.label : pName(p), pips: ci ? ci.colors : null, guest: !useCmd && gm() && !p.userId, pos: blank(), g: 0 }; rows.set(k, e); }
+        e.g++; const x = e.pos[p.turnPos - 1]; x.g++; if (p.isWinner) x.w++;
+      }));
+      const avg = pg.reduce((a, g) => a + g.players.length, 0) / pg.length;
+      const base = Math.min(100, Math.round(100 / (size === 'all' ? avg : size)));
+      const list = [...rows.values()].sort((a, b) => b.g - a.g).slice(0, 12);
+      html += `<section class="card pos-card"><div class="card-title"><span><span class="ct-ico">${I.play}</span>Win rate by turn position</span></div>
+        ${sizes.length > 1 ? `<div class="seg small-seg pod-seg" role="group" aria-label="Pod size"><span class="seg-lbl">Pod</span>${sizes.map((n) => `<button data-act="posSize" data-v="${n}" class="${size === n ? 'on' : ''}" aria-label="${n} players">${n}p</button>`).join('')}<button data-act="posSize" data-v="all" class="${size === 'all' ? 'on' : ''}">All</button></div>` : `<div class="muted small pod-one">${size}-player games</div>`}
+        ${all.map((s, i) => pbar(`${ordinal(i + 1)} to play`, `<span class="pos-badge p${i + 1}">${i + 1}</span>`, s, base, 'pos')).join('')}
+        <div class="bar-note">fair share ≈ ${base}%${size === 'all' ? ` (1 in ${avg.toFixed(1)} players)` : ''}</div>
+        ${list.length ? `${bySeg('posBy', posBy)}<div class="xtable pos-t" style="--cols:${maxPos}" role="table" aria-label="Win rate by turn position, ${useCmd ? 'per commander' : 'per player'}">
+          <div class="xt-head" role="row"><span role="columnheader">${useCmd ? (meMode ? 'My decks' : 'Commander') : 'Player'}</span>${all.map((_, i) => `<span role="columnheader">${ordinal(i + 1)}</span>`).join('')}</div>
+          ${list.map((e) => `<div class="xt-row" role="row">${nameCell(e)}${e.pos.map((x) => (x.g ? `<span class="xt-cell" style="--h:${rate(x) / 100}" role="cell" aria-label="${pct(x.w, x.g)}, ${x.w} of ${x.g}"><b>${pct(x.w, x.g)}</b><small>${x.w}/${x.g}</small></span>` : '<span class="xt-cell none" role="cell">·</span>')).join('')}</div>`).join('')}
+        </div>` : ''}
+        ${note(posGames.length)}
+      </section>`;
+    }
+    // --- turn-1 Sol Ring
+    if (solGames.length) {
+      const w = { g: 0, w: 0 }, wo = { g: 0, w: 0 }; let gamesWith = 0, entries = 0;
+      const rows = new Map(); const useCmd = meMode || solBy === 'cmds';
+      solGames.forEach((g) => {
+        let any = false;
+        g.players.forEach((p) => {
+          if (!countP(p)) return;
+          entries++; const t = p.solRingT1 ? w : wo; t.g++; if (p.isWinner) t.w++; if (p.solRingT1) any = true;
+          if (useCmd && !p.commanderName) return;
+          const k = useCmd ? cmdKey(p) : pKey(p);
+          let e = rows.get(k);
+          if (!e) { const ci = useCmd ? cmdInfo(p) : null; e = { label: ci ? ci.label : pName(p), pips: ci ? ci.colors : null, guest: !useCmd && gm() && !p.userId, g: 0, sr: { g: 0, w: 0 }, no: { g: 0, w: 0 } }; rows.set(k, e); }
+          e.g++; const x = p.solRingT1 ? e.sr : e.no; x.g++; if (p.isWinner) x.w++;
+        });
+        if (any) gamesWith++;
+      });
+      const avg = solGames.reduce((a, g) => a + g.players.length, 0) / solGames.length;
+      const base = Math.min(100, Math.round(100 / avg));
+      const list = [...rows.values()].filter((e) => e.sr.g).sort((a, b) => b.sr.g - a.sr.g || b.g - a.g).slice(0, 12);
+      html += `<section class="card sol-card"><div class="card-title"><span><span class="ct-ico sol">${I.solring}</span>Turn 1 Sol Ring</span></div>
+        <div class="mini-stats sol-mini">
+          <div><b>${pct(gamesWith, solGames.length)}</b><span>${meMode ? 'of your games' : 'of games'}</span></div>
+          <div><b>${w.g}</b><span>time${w.g === 1 ? '' : 's'}</span></div>
+          ${meMode ? `<div><b>${pct(w.w, w.g)}</b><span>win rate with it</span></div>` : `<div><b>${pct(w.g, entries)}</b><span>of players</span></div>`}
+        </div>
+        ${w.g ? `${pbar('With T1 Sol Ring', `<span class="sr-ico">${I.solring}</span>`, w, base, 'sol')}${pbar('Without', '<span class="sr-ico off"></span>', wo, base)}
+        <div class="bar-note">fair share ≈ ${base}% (1 in ${avg.toFixed(1)} players)</div>
+        ${list.length ? `${bySeg('solBy', solBy)}<div class="xtable sol-t" role="table" aria-label="Turn 1 Sol Ring ${useCmd ? 'per commander' : 'per player'}">
+          <div class="xt-head" role="row"><span role="columnheader">${useCmd ? (meMode ? 'My decks' : 'Commander') : 'Player'}</span><span role="columnheader">T1 Sol</span><span role="columnheader">Win% with</span><span role="columnheader">without</span></div>
+          ${list.map((e) => `<div class="xt-row" role="row">${nameCell(e)}<span class="xt-cell plain" role="cell"><b>${e.sr.g}</b><small>of ${e.g}</small></span><span class="xt-cell" style="--h:${rate(e.sr) / 100}" role="cell"><b>${pct(e.sr.w, e.sr.g)}</b><small>${e.sr.w}/${e.sr.g}</small></span><span class="xt-cell${e.no.g ? '' : ' none'}" style="--h:${rate(e.no) / 100}" role="cell">${e.no.g ? `<b>${pct(e.no.w, e.no.g)}</b><small>${e.no.w}/${e.no.g}</small>` : '·'}</span></div>`).join('')}
+        </div>` : ''}` : `<p class="muted small">No turn-1 Sol Rings recorded yet.</p>`}
+        ${note(solGames.length)}
+      </section>`;
+    }
+    return html;
+  }
   function renderHistory(v) {
     const games = allGames(); const myId = me() ? me().id : null;
     const recName = (g) => { const m = memberById(g.recordedBy); return m ? m.display_name : ''; };
@@ -854,7 +986,7 @@
           ${gm() ? `<div class="muted small">${cloud.isPending(g.id) ? '<span class="pend-badge">⟳ waiting to sync</span> ' : ''}${recName(g) ? 'recorded by ' + esc(recName(g)) : ''}</div>` : ''}</div>
           ${!gm() || g.recordedBy === myId ? `<button class="icon-btn danger" data-act="deleteGame" data-id="${g.id}" aria-label="Delete game">${I.trash}</button>` : ''}</div>
           <div class="gc-winner ${w ? '' : 'draw'}">${w ? `${I.trophy}<b>${esc(pName(w))}</b>${w.commanderName ? `<span class="ellipsis muted"><span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}</span>` : ''}` : `${I.flag}<b>Draw</b>`}</div>
-          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis">${p.seat != null ? `<span class="seat-dot sm seat-${p.seat % 6}"></span>` : ''}<b>${esc(pName(p))}</b>${gm() && !p.userId ? ' <span class="guest-tag">Guest</span>' : ''} ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="muted small nowrap">${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${p.wentFirst ? ' · went 1st' : ''}</span></div>`).join('')}</div></div>`;
+          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis">${p.seat != null ? `<span class="seat-dot sm seat-${p.seat % 6}"></span>` : ''}<b>${esc(pName(p))}</b>${gm() && !p.userId ? ' <span class="guest-tag">Guest</span>' : ''} ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="gc-tail muted small nowrap">${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${Number.isInteger(p.turnPos) ? `<span class="tp-badge" role="img" aria-label="${ordinal(p.turnPos)} to play" title="${ordinal(p.turnPos)} to play">${I.play}${p.turnPos}</span>` : p.wentFirst ? ' · went 1st' : ''}${p.solRingT1 ? `<span class="sr-badge" role="img" aria-label="Turn 1 Sol Ring" title="Turn 1 Sol Ring">${I.solring}</span>` : ''}</span></div>`).join('')}</div></div>`;
       }).join('') : `<div class="empty"><div class="empty-ico">${I.history}</div><p>No games yet.</p><p class="muted small">Saved games appear here. You can delete a wrong entry anytime.</p></div>`}`;
   }
 
@@ -1467,7 +1599,7 @@
         <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" value="${esc(d ? d.partner || '' : '')}" maxlength="80" autocapitalize="words"></div>
         <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="${st.colors.includes(x)}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
         <div class="field"><label>Deck name <span class="muted">(optional)</span></label><input type="text" data-f="name" value="${esc(d ? d.name || '' : '')}" maxlength="60" placeholder="e.g. Superfriends"></div>
-        ${s ? `<div class="mini-stats"><div><b>${s.games}</b><span>games</span></div><div><b>${s.wins}</b><span>wins</span></div><div><b>${pct(s.wins, s.games)}</b><span>win rate</span></div><div><b>${fmtDur(s.dur / s.games)}</b><span>avg game</span></div></div>` : ''}
+        ${s ? `<div class="mini-stats"><div><b>${s.games}</b><span>games</span></div><div><b>${s.wins}</b><span>wins</span></div><div><b>${pct(s.wins, s.games)}</b><span>win rate</span></div><div><b>${fmtDur(s.dur / s.games)}</b><span>avg game</span></div></div>${cmdTurnHtml(s)}` : ''}
         <div class="sheet-actions">${d ? '<button class="btn danger-text" data-a="delete">Delete</button>' : ''}<button class="btn primary grow" data-a="save">${d ? 'Save' : 'Add deck'}</button></div>
       </div>`, { cls: 'tall' });
     ov.addEventListener('click', async (e) => {
@@ -1523,6 +1655,9 @@
     goSettings: () => setTab('settings'),
     editProfile: () => editProfile(),
     statsScope: (el) => { statsScope = el.dataset.v; renderTab(); },
+    posSize: (el) => { posSize = el.dataset.v === 'all' ? 'all' : +el.dataset.v; renderTab(); },
+    posBy: (el) => { posBy = el.dataset.v; renderTab(); },
+    solBy: (el) => { solBy = el.dataset.v; renderTab(); },
     newDeck: () => openDeckEditor(null),
     editDeck: (el) => openDeckEditor(el.dataset.id),
     syncNow: async () => {

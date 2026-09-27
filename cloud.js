@@ -63,11 +63,14 @@
   const fromRow = (r) => ({
     id: r.id, groupId: r.group_id, recordedBy: r.recorded_by, startedAt: Date.parse(r.started_at), endedAt: Date.parse(r.ended_at),
     durationMs: r.duration_ms, turns: r.turns, startingLife: r.starting_life, playerCount: r.player_count, winnerIndex: r.winner_index, players: r.players,
+    firstPlayerIndex: r.first_player_index ?? null, // v1.5 (null for older games)
   });
   const toRow = (g, gid) => ({
     id: g.id, group_id: gid, recorded_by: st.user.id, started_at: new Date(g.startedAt).toISOString(), ended_at: new Date(g.endedAt).toISOString(),
     duration_ms: Math.round(g.durationMs || 0), turns: g.turns || null, starting_life: g.startingLife, player_count: g.playerCount,
     winner_index: g.winnerIndex, players: g.players,
+    // v1.5: who took the first turn (per-player turnPos / solRingT1 travel inside players)
+    first_player_index: Number.isInteger(g.firstPlayerIndex) && g.firstPlayerIndex >= 0 && g.firstPlayerIndex < g.playerCount ? g.firstPlayerIndex : null,
   });
 
   // ---------- auth ----------

@@ -522,6 +522,78 @@ body.in-game #toast.show { transform: translate(-50%, 44px); }
 .form-error.center { text-align: center; }
 .form-error:empty { min-height: 0; margin: 0; }
 
+/* ---------- turn order & turn-1 Sol Ring (v1.5) ---------- */
+:root { --sol: #ffb36b; }
+.toggle-row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.toggle-row.three .tbtn { gap: 6px; padding: 0 6px; font-size: 13.5px; line-height: 1.15; text-align: left; }
+.toggle-row.three .tbtn svg { width: 17px; height: 17px; flex: none; }
+.tbtn.sol.on { background: rgba(255, 179, 107, .15); border-color: var(--sol); color: var(--sol); box-shadow: 0 0 18px -6px rgba(255, 179, 107, .75); }
+.chip.sol { color: var(--sol); border-color: rgba(255, 179, 107, .35); }
+/* end-game: who went first / Sol Ring toggles */
+.to-list, .sol-list { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 8px; }
+.sol-list { margin-bottom: 18px; }
+.to-chip, .sol-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; max-width: 100%; padding: 0 14px 0 6px; border-radius: 21px; background: rgba(255, 255, 255, .045); border: 1px solid var(--line2); font-weight: 650; font-size: 14px; transition: all var(--t-fast); }
+.to-chip .ellipsis, .sol-chip .ellipsis { min-width: 0; max-width: 11em; }
+.to-pos { min-width: 34px; height: 30px; padding: 0 6px; border-radius: 15px; display: grid; place-items: center; font: 800 12.5px/1 var(--font-num); color: var(--muted); background: rgba(255, 255, 255, .07); font-variant-numeric: tabular-nums; }
+.to-chip .seat-dot.sm { width: 10px; height: 10px; }
+.to-chip.on { border-color: var(--accent); background: linear-gradient(180deg, rgba(157, 123, 255, .26), rgba(114, 83, 255, .14)); color: #fff; box-shadow: 0 0 18px -8px rgba(157, 123, 255, .9); }
+.to-chip.on .to-pos { color: #1a1033; background: var(--accent-text); }
+.sol-chip { padding-left: 12px; color: var(--muted); }
+.sol-chip svg { width: 18px; height: 18px; flex: none; opacity: .6; }
+.sol-chip.on { color: var(--sol); border-color: var(--sol); background: rgba(255, 179, 107, .13); box-shadow: 0 0 18px -8px rgba(255, 179, 107, .9); }
+.sol-chip.on svg { opacity: 1; }
+/* history badges */
+.gc-tail { display: inline-flex; align-items: center; gap: 6px; }
+.tp-badge { display: inline-flex; align-items: center; gap: 2px; height: 19px; padding: 0 6px 0 4px; border-radius: 10px; background: rgba(157, 123, 255, .14); color: var(--accent-text); font: 750 11.5px/1 var(--font-num); }
+.tp-badge svg { width: 10px; height: 10px; fill: currentColor; stroke: none; }
+.sr-badge { display: inline-grid; place-items: center; width: 21px; height: 19px; border-radius: 10px; background: rgba(255, 179, 107, .16); color: var(--sol); }
+.sr-badge svg { width: 13px; height: 13px; stroke-width: 2.2; }
+/* stats cards */
+.ct-ico { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; margin-right: 8px; vertical-align: -6px; color: var(--accent-text); background: rgba(157, 123, 255, .16); }
+.ct-ico svg { width: 14px; height: 14px; stroke-width: 2.2; }
+.ct-ico.sol { color: var(--sol); background: rgba(255, 179, 107, .15); }
+.pos-card .ct-ico svg, .new-card .ct-ico svg { fill: currentColor; stroke: none; width: 12px; height: 12px; }
+.pod-seg { align-items: center; }
+.pod-seg .seg-lbl { padding: 0 6px 0 8px; font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .08em; }
+.pod-one { margin: -6px 0 8px; }
+.pos-badge { width: 22px; height: 22px; flex: none; border-radius: 7px; display: grid; place-items: center; font: 800 12px/1 var(--font-num); color: var(--accent-text); background: rgba(157, 123, 255, .15); }
+.pos-badge.p1 { color: #1a1033; background: var(--accent-text); }
+.bar.pos i { --fill: linear-gradient(90deg, #5a3cf0, #4fe3d6); --fill-glow: rgba(79, 227, 214, .45); }
+.bar.sol i { --fill: linear-gradient(90deg, #e0782f, #ffcf8a); --fill-glow: rgba(255, 179, 107, .55); }
+.sr-ico { width: 22px; height: 22px; flex: none; display: grid; place-items: center; color: var(--sol); }
+.sr-ico svg { width: 18px; height: 18px; }
+.sr-ico.off::before { content: ''; width: 14px; height: 10px; border-radius: 50%; border: 1.6px dashed var(--faint); }
+.sub-seg { margin: 14px 0 6px; }
+.sol-mini { grid-template-columns: repeat(3, 1fr); margin: 0 0 8px; }
+.sol-mini b { color: var(--text); }
+.xtable { font-size: 13px; }
+.xt-head, .xt-row { display: grid; grid-template-columns: minmax(0, 1fr) repeat(var(--cols, 3), minmax(38px, 60px)); gap: 4px; align-items: center; }
+.sol-t .xt-head, .sol-t .xt-row { grid-template-columns: minmax(0, 1fr) 52px 62px 62px; }
+.xt-head { color: var(--faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; padding: 6px 0; text-align: center; }
+.xt-head span:first-child { text-align: left; }
+.xt-row { padding: 5px 0; border-top: 1px solid var(--line); }
+.xt-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: 600; }
+.xt-name .pips .pip { width: 8px; height: 8px; }
+.xt-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 36px; border-radius: 9px; font-family: var(--font-num); font-variant-numeric: tabular-nums; line-height: 1.1;
+  background: color-mix(in srgb, #7c5cff calc(var(--h, 0) * 55%), rgba(255, 255, 255, .04)); }
+.xt-cell b { font-size: 12.5px; font-weight: 800; }
+.xt-cell small { font-size: 10.5px; color: var(--muted); }
+.xt-cell.plain { background: rgba(255, 255, 255, .04); }
+.xt-cell.none { color: var(--faint); background: transparent; }
+.stat-note { font-size: 11.5px; color: var(--faint); margin: 10px 0 0; }
+.new-card p { margin: 0; }
+.cmd-turn .stat-note { margin: 0; }
+/* commander / deck detail */
+.cmd-turn { margin: 10px 0 4px; padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, .035); border: 1px solid var(--line); display: grid; gap: 8px; }
+.ct-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13.5px; }
+.ct-lbl { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-weight: 600; }
+.ct-lbl svg { width: 14px; height: 14px; }
+.ct-v b { font-family: var(--font-num); }
+.tp-cells { display: flex; gap: 5px; flex-wrap: wrap; }
+.tp-cell { display: flex; flex-direction: column; align-items: center; min-width: 44px; padding: 4px 6px; border-radius: 9px; background: rgba(157, 123, 255, .1); line-height: 1.1; font-family: var(--font-num); }
+.tp-cell b { font-size: 13px; }
+.tp-cell small { font-size: 10px; color: var(--muted); }
+
 /* ---------- wide screens (iPad): more room, multi-column lists ---------- */
 @media (min-width: 768px) {
   #view { max-width: 720px; padding-top: calc(var(--sat) + 28px); }

@@ -87,3 +87,28 @@ Optional. Without an account the app works exactly as before, 100% local.
   buttons) and `tools/qa-flows.mjs` (poison, concede, restart, draw, double submit, backup round trip) are exploratory
   scripts (`OUT=/tmp/qa`, `URL=` to point them at the live site); the regressions they found are covered in `test.mjs` /
   `test-online.mjs`.
+
+## Turn order & turn-1 Sol Ring (v1.5.0)
+- **End game screen**: a *Turn order* row shows who played 1st, 2nd, … (seats go clockwise, the order the app already uses
+  for the table layout). It starts from the random first player (or the one picked from the game menu); if nobody was
+  picked, seat 1 is assumed and a note says so. Tap a player to say they went first — the others follow clockwise.
+  Below it, *Turn 1 Sol Ring?* has one toggle per player (default off).
+- **In game**: each player's ⋯ sheet has a *T1 Sol Ring* toggle next to Monarch / Initiative. When on, a small Sol Ring
+  badge shows on that panel and the end-game toggle is already ticked. Restart clears it.
+- **Stored per game** (backward compatible, nothing is rewritten): `firstPlayerIndex` on the game, and per player
+  `turnPos` (1..N) and `solRingT1` (true/false); `wentFirst` is kept in sync. Older games simply lack them and are left
+  out of these stats. Backups (export/import) carry the fields as-is.
+- **Supabase**: migration `games_turn_order_sol_ring` adds the nullable column `games.first_player_index` (check:
+  `0 <= index < player_count`); `turnPos` / `solRingT1` travel inside the existing `players` JSON. RLS unchanged (the
+  existing member-insert / member-read / recorder-delete policies cover the new column). `cloud.js` maps
+  `firstPlayerIndex` ↔ `first_player_index`; the offline queue stores whole game objects, so queued games keep the data.
+- **Stats** (Group / My stats scope respected):
+  - *Win rate by turn position*: wins/games and % for 1st…Nth to play, with a pod-size selector (defaults to the most
+    common size; *All* mixes sizes), a fair-share marker, and a per-player / per-commander table (My stats: my decks).
+  - *Turn 1 Sol Ring*: % of games with one, how many times, % of players; win rate with vs without; per player /
+    commander table (times, win % with, win % without).
+  - A note shows how many games are counted ("Based on 21 of 27 games — games saved before this update aren't counted").
+    With no tracked games yet the sections are replaced by a one-paragraph explanation.
+  - Commander / deck detail sheets show win rate per turn position and turn-1 Sol Ring count; History shows a ▶N badge
+    (turn position) and a Sol Ring badge per player.
+- `tools/seed-v15.mjs` builds demo data (tracked 3- and 4-player games plus older untracked ones) for tests/screenshots.
