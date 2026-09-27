@@ -1,14 +1,21 @@
 /* Commander Tracker service worker: offline app shell, stale-while-revalidate. */
-const CACHE = 'edh-tracker-v1.1.1';
+const CACHE = 'edh-tracker-v1.2.0';
 const ASSETS = [
-  './', 'index.html', 'styles.css', 'app.js', 'manifest.json',
+  './', 'index.html', 'styles.css', 'app.js', 'cloud.js', 'manifest.json',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'
 ];
+// supabase-js, pinned (immutable URL): cached for offline use; the Supabase API itself is never cached
+const CDN = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js'];
+const CDN_HOST = 'cdn.jsdelivr.net';
 
 self.addEventListener('install', (e) => {
   // cache: 'reload' bypasses the HTTP cache so a new version never precaches stale files
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))));
+  e.waitUntil(caches.open(CACHE).then(async (c) => {
+    await c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })));
+    // the CDN copy is optional: a CDN hiccup must not break installing the app shell (online features then load later)
+    await Promise.all(CDN.map((u) => c.add(new Request(u, { mode: 'cors', credentials: 'omit' })).catch(() => {})));
+  }));
 });
 
 self.addEventListener('activate', (e) => {
@@ -28,7 +35,20 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.hostname === CDN_HOST) { // versioned library files: cache-first
+    e.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      const hit = await cache.match(req.url);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res && res.ok && (res.type === 'cors' || res.type === 'basic')) cache.put(req.url, res.clone());
+      return res;
+    })());
+    return;
+  }
+  if (url.origin !== self.location.origin) return; // Supabase API etc.: straight to the network
   const isNav = req.mode === 'navigate';
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);

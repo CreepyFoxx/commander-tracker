@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.1.1';
+  const APP_VERSION = '1.2.0';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -125,7 +125,7 @@
     if (!ov || ov._closing) return; ov._closing = true;
     ov.classList.remove('open');
     if (ov._onClose) ov._onClose();
-    setTimeout(() => ov.remove(), 220);
+    setTimeout(() => { ov.remove(); if (renderQueued && !$('.overlay')) requestRender(); }, 220);
   }
   function refreshOverlays() { $$('.overlay').forEach((ov) => ov._refresh && !ov._closing && ov._refresh()); }
   function choiceDialog(message, choices, opts = {}) {
@@ -144,6 +144,7 @@
   // ---------- navigation ----------
   let tab = 'play';
   let cmdSort = 'games';
+  let statsScope = 'group';
   function renderTab() {
     $$('#tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     const v = $('#view');
@@ -163,9 +164,13 @@
     return `<div class="card hint-card"><b>Install on your iPhone</b><p>Open this page in Safari, tap <b>Share</b> <span class="share-ico">⬆︎</span> then <b>Add to Home Screen</b>. It runs full-screen and offline. Your data lives only on this device — use Settings → Export to back it up.</p></div>`;
   }
   function renderPlay(v) {
+    if (gm()) { renderGroupPlay(v); return; }
     const s = getSetup(); const g = data.current;
+    const promo = !cloud ? '' : !me() ? `<div class="card promo"><div><b>Play with your group</b><div class="muted small">Sign in to load your friends' decks and share games & stats.</div></div><button class="btn sm" data-act="authSignin">Sign in</button></div>`
+      : `<div class="card promo"><div><b>Signed in as ${esc(me().display_name)}</b><div class="muted small">Create or join a playgroup to share games.</div></div><button class="btn sm" data-act="goSettings">Playgroup</button></div>`;
     v.innerHTML = `
     <header class="page-head"><div><div class="eyebrow">Commander Tracker</div><h1>New game</h1></div></header>
+    ${g ? '' : promo}
     ${g ? `<div class="card resume"><div><b>Game in progress</b><div class="muted small">${g.players.length} players · started ${fmtTime(g.startedAt)}</div></div>
       <div class="row"><button class="btn ghost sm" data-act="discardGame">Discard</button><button class="btn primary sm" data-act="resumeGame">Resume</button></div></div>` : ''}
     <section class="card">
@@ -269,7 +274,8 @@
   async function startGame() {
     if (data.current && !(await confirmDialog('A game is in progress. Discard it and start a new one?', 'Discard & start', true))) return;
     const s = getSetup();
-    const players = s.seats.slice(0, s.count).map((seat, i) => {
+    const groupId = gm() ? cloud.groupId() : null;
+    const players = groupId ? groupPlayers(s) : s.seats.slice(0, s.count).map((seat, i) => {
       const c = getCmd(seat.commanderId);
       return {
         id: 'p' + i, seat: i, name: seat.name.trim() || `Player ${i + 1}`,
@@ -277,7 +283,8 @@
         life: s.life, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, killedBy: null,
       };
     });
-    data.current = { id: uid(), startedAt: Date.now(), startingLife: s.life, players, monarch: null, initiative: null, firstPlayerId: null };
+    if (!players) return;
+    data.current = { id: uid(), groupId, startedAt: Date.now(), startingLife: s.life, players, monarch: null, initiative: null, firstPlayerId: null };
     save(true);
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     openGame();
@@ -633,8 +640,13 @@
         finalLife: p.life, poison: p.poison, maxCmdTaken: Math.max(0, ...Object.values(p.cmd)), casts: p.tax[0] + p.tax[1],
         eliminated: p.eliminated, elimOrder: p.elimOrder, elimReason: p.elimReason,
         killedBy: p.killedBy ? idxOf(p.killedBy) : null, isWinner: p === winner, wentFirst: g.firstPlayerId === p.id, place: ranking.indexOf(p) + 1,
+        ...(g.groupId ? { kind: p.kind, userId: p.userId || null, guestId: p.guestId || null, deckId: p.deckId || null } : {}),
       })),
     };
+    if (g.groupId && cloud && me() && cloud.groups().some((x) => x.id === g.groupId)) {
+      rec.id = cloud.uuid(); rec.pendingSync = cloud.offline(); cloud.queueGame(g.groupId, rec);
+      data.current = null; save(true); closeGame(); showResult(rec); return;
+    }
     data.games.unshift(rec); data.current = null; save(true);
     closeGame(); showResult(rec);
   }
@@ -642,7 +654,7 @@
     const w = rec.winnerIndex != null ? rec.players[rec.winnerIndex] : null;
     const ov = openSheet(`<div class="dialog-body center"><div class="trophy-big">🏆</div>
       <h2>${w ? esc(w.name) + ' wins!' : 'Draw'}</h2>${w && w.commanderName ? `<div class="muted"><span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}${w.partnerName ? ' + ' + esc(w.partnerName) : ''}</div>` : ''}
-      <div class="muted small">${fmtDur(rec.durationMs)}${rec.turns ? ` · ${rec.turns} turns` : ''} · saved to history</div>
+      <div class="muted small">${fmtDur(rec.durationMs)}${rec.turns ? ` · ${rec.turns} turns` : ''} · ${rec.pendingSync ? 'saved — will sync when online' : 'saved to history'}</div>
       <div class="dialog-actions"><button class="btn primary" data-r="rematch">Rematch</button><button class="btn" data-r="stats">View stats</button><button class="btn ghost" data-close>Done</button></div></div>`, { dialog: true });
     ov.addEventListener('click', (e) => {
       const b = e.target.closest('[data-r]'); if (!b) return; closeOverlay(ov);
@@ -652,11 +664,11 @@
 
   // ---------- stats ----------
   function lastPlayedMap() {
-    const m = new Map(); data.games.forEach((g) => g.players.forEach((p) => { if (p.commanderId) m.set(p.commanderId, Math.max(m.get(p.commanderId) || 0, g.endedAt)); })); return m;
+    const m = new Map(); allGames().forEach((g) => g.players.forEach((p) => { if (p.commanderId) m.set(p.commanderId, Math.max(m.get(p.commanderId) || 0, g.endedAt)); })); return m;
   }
   function commanderStats() {
     const m = new Map();
-    for (const g of data.games) {
+    for (const g of allGames()) {
       g.players.forEach((p) => {
         if (!p.commanderId) return;
         let s = m.get(p.commanderId);
@@ -668,6 +680,7 @@
     return m;
   }
   function renderCommanders(v) {
+    if (gm()) { renderDecks(v); return; }
     const stats = commanderStats();
     const empty = { games: 0, wins: 0, dur: 0, turns: 0, last: 0, kills: 0 };
     const list = data.commanders.map((c) => ({ c, s: stats.get(c.id) || empty }));
@@ -688,10 +701,17 @@
           <div class="cc-stats"><span><b>${s.games}</b> game${s.games === 1 ? '' : 's'}</span><span><b>${s.wins}</b> win${s.wins === 1 ? '' : 's'}</span><span><b>${s.games ? fmtDur(s.dur / s.games) : '—'}</b> avg</span>${s.kills ? `<span><b>${s.kills}</b> cmdr kills</span>` : ''}<span>${s.last ? 'Last ' + fmtShort(s.last) : 'Never played'}</span></div>
         </button>`).join('') : `<div class="empty"><div class="empty-ico">🛡️</div><p>No commanders yet.</p><p class="muted small">Add your decks here, or create them when setting up a game.</p><button class="btn primary" data-act="newCmd">Add your first commander</button></div>`}`;
   }
+  function statsHead() {
+    if (!gm()) return `<header class="page-head"><div><div class="eyebrow">Overview</div><h1>Stats</h1></div></header>`;
+    return `<header class="page-head"><div><div class="eyebrow">${esc(cloud.group().name)}</div><h1>Stats</h1></div>${syncPill()}</header>
+      <div class="seg small-seg scope-seg"><button data-act="statsScope" data-v="group" class="${statsScope === 'group' ? 'on' : ''}">Group</button><button data-act="statsScope" data-v="me" class="${statsScope === 'me' ? 'on' : ''}">My stats</button></div>`;
+  }
   function renderStats(v) {
-    const games = data.games;
+    const meMode = gm() && statsScope === 'me'; const myId = meMode ? me().id : null;
+    const games = meMode ? allGames().filter((g) => g.players.some((p) => p.userId === myId)) : allGames();
+    const countP = (p) => !meMode || p.userId === myId;
     if (!games.length) {
-      v.innerHTML = `<header class="page-head"><div><div class="eyebrow">Overview</div><h1>Stats</h1></div></header><div class="empty"><div class="empty-ico">📊</div><p>No games recorded yet.</p><p class="muted small">Finish a game with “End game & save” to see stats here.</p></div>`;
+      v.innerHTML = `${statsHead()}<div class="empty"><div class="empty-ico">📊</div><p>No games recorded yet.</p><p class="muted small">Finish a game with “End game & save” to see stats here.</p></div>`;
       return;
     }
     const n = games.length;
@@ -703,26 +723,27 @@
     const colorStats = Object.fromEntries(WUBRG.concat('C').map((c) => [c, { g: 0, w: 0 }]));
     const countStats = [0, 1, 2, 3, 4, 5].map(() => ({ g: 0, w: 0 }));
     const reasons = { commander: 0, life: 0, poison: 0, conceded: 0 };
-    let firstGames = 0, firstWins = 0;
+    let firstGames = 0, firstWins = 0, myGames = 0, myWins = 0;
     games.forEach((g) => {
       g.players.forEach((p) => {
-        if (p.commanderName) {
+        if (p.commanderName && countP(p)) {
           const label = p.partnerName ? `${p.commanderName} + ${p.partnerName}` : p.commanderName;
           const k = p.commanderId || 'name:' + label.toLowerCase();
-          const live = getCmd(p.commanderId);
+          const live = cmdLookup(p.commanderId);
           const e = byCmd.get(k) || { label: live ? cmdLabel(live) : label, colors: live ? live.colors : p.colors, g: 0, w: 0 };
           e.g++; if (p.isWinner) e.w++; byCmd.set(k, e);
           const colors = live ? live.colors : p.colors || [];
           (colors.length ? colors : ['C']).forEach((c) => { colorStats[c].g++; if (p.isWinner) colorStats[c].w++; });
           countStats[colors.length].g++; if (p.isWinner) countStats[colors.length].w++;
         }
-        const pk = p.name.trim().toLowerCase();
-        const pe = byPlayer.get(pk) || { name: p.name, g: 0, w: 0, placeSum: 0, cmds: new Map() };
+        const pk = pKey(p);
+        const pe = byPlayer.get(pk) || { name: pName(p), guest: gm() && !p.userId, g: 0, w: 0, placeSum: 0, cmds: new Map() };
         pe.g++; if (p.isWinner) pe.w++; pe.placeSum += p.place || g.playerCount;
         if (p.commanderName) pe.cmds.set(p.commanderName, (pe.cmds.get(p.commanderName) || 0) + 1);
         byPlayer.set(pk, pe);
         if (p.eliminated && reasons[p.elimReason] != null) reasons[p.elimReason]++;
         if (p.wentFirst) { firstGames++; if (p.isWinner) firstWins++; }
+        if (meMode && p.userId === myId) { myGames++; if (p.isWinner) myWins++; }
       });
     });
     const cmds = [...byCmd.values()];
@@ -737,25 +758,25 @@
     const reasonTotal = Object.values(reasons).reduce((a, b) => a + b, 0);
     const players = [...byPlayer.values()].sort((a, b) => b.g - a.g || b.w - a.w);
     const winnerOf = (g) => g.players[g.winnerIndex];
-    v.innerHTML = `<header class="page-head"><div><div class="eyebrow">Overview</div><h1>Stats</h1></div></header>
+    v.innerHTML = `${statsHead()}
       <div class="tiles">
         <div class="tile"><b>${n}</b><span>games played</span></div>
         <div class="tile"><b>${fmtDur(totalDur / n)}</b><span>avg duration</span></div>
         <div class="tile"><b>${turnGames.length ? (totalTurns / turnGames.length).toFixed(1) : '—'}</b><span>avg turns</span></div>
         <div class="tile"><b>${fmtDur(totalDur)}</b><span>total time played</span></div>
         <div class="tile"><b>${avgP.toFixed(1)}</b><span>avg players</span></div>
-        <div class="tile"><b>${firstGames ? pct(firstWins, firstGames) : '—'}</b><span>first-player win rate</span></div>
+        ${meMode ? `<div class="tile"><b>${pct(myWins, myGames)}</b><span>your win rate (${myWins}/${myGames})</span></div>` : `<div class="tile"><b>${firstGames ? pct(firstWins, firstGames) : '—'}</b><span>first-player win rate</span></div>`}
       </div>
       <section class="card"><div class="card-title">Highlights</div>
         ${most ? `<div class="hl-row"><span class="muted">Most played</span><span class="hl-v"><span class="pips">${pips(most.colors)}</span> ${esc(most.label)} <small>${most.g} game${most.g === 1 ? '' : 's'}</small></span></div>` : ''}
         ${best ? `<div class="hl-row"><span class="muted">Best win rate${minG > 1 ? ' (3+ games)' : ''}</span><span class="hl-v"><span class="pips">${pips(best.colors)}</span> ${esc(best.label)} <small>${pct(best.w, best.g)}</small></span></div>` : ''}
-        ${fastest ? `<div class="hl-row"><span class="muted">Fastest win</span><span class="hl-v">${esc(winnerOf(fastest).name)} <small>turn ${fastest.turns} · ${fmtShort(fastest.endedAt)}</small></span></div>` : ''}
+        ${fastest ? `<div class="hl-row"><span class="muted">Fastest win</span><span class="hl-v">${esc(pName(winnerOf(fastest)))} <small>turn ${fastest.turns} · ${fmtShort(fastest.endedAt)}</small></span></div>` : ''}
         <div class="hl-row"><span class="muted">Longest game</span><span class="hl-v">${fmtDur(longest.durationMs)} <small>${fmtShort(longest.endedAt)}</small></span></div>
         <div class="hl-row"><span class="muted">Shortest game</span><span class="hl-v">${fmtDur(shortest.durationMs)} <small>${fmtShort(shortest.endedAt)}</small></span></div>
       </section>
-      <section class="card"><div class="card-title">Players</div>
+      <section class="card"><div class="card-title">Players${meMode ? ' <span class="muted small">in games with you</span>' : ''}</div>
         <div class="ptable"><div class="pt-head"><span>Player</span><span>G</span><span>W</span><span>Win%</span><span>Avg pl.</span></div>
-        ${players.map((p) => { const fav = [...p.cmds.entries()].sort((a, b) => b[1] - a[1])[0]; return `<div class="pt-row"><span class="pt-name"><b>${esc(p.name)}</b>${fav ? `<small>${esc(fav[0])}</small>` : ''}</span><span>${p.g}</span><span>${p.w}</span><span class="acc">${pct(p.w, p.g)}</span><span>${(p.placeSum / p.g).toFixed(1)}</span></div>`; }).join('')}</div>
+        ${players.map((p) => { const fav = [...p.cmds.entries()].sort((a, b) => b[1] - a[1])[0]; return `<div class="pt-row"><span class="pt-name"><b>${esc(p.name)}${p.guest ? ' <span class="guest-tag">Guest</span>' : ''}</b>${fav ? `<small>${esc(fav[0])}</small>` : ''}</span><span>${p.g}</span><span>${p.w}</span><span class="acc">${pct(p.w, p.g)}</span><span>${(p.placeSum / p.g).toFixed(1)}</span></div>`; }).join('')}</div>
       </section>
       <section class="card"><div class="card-title">Win rate by color <span class="muted small">baseline ≈ ${Math.round(100 / avgP)}%</span></div>
         ${WUBRG.concat('C').map((c) => bar(COLOR_NAME[c], `<span class="pip pip-${c}"></span>`, colorStats[c])).join('')}
@@ -763,7 +784,7 @@
       <section class="card"><div class="card-title">Win rate by number of colors</div>
         ${['Colorless', 'Mono', 'Two-color', 'Three-color', 'Four-color', 'Five-color'].map((l, i) => (countStats[i].g ? bar(l, '', countStats[i]) : '')).join('')}
       </section>
-      <section class="card"><div class="card-title">Commanders</div>
+      <section class="card"><div class="card-title">${meMode ? 'My decks' : 'Commanders'}</div>
         ${cmds.sort((a, b) => b.g - a.g || b.w - a.w).map((c) => bar(esc(c.label), `<span class="pips">${pips(c.colors)}</span>`, c)).join('')}
       </section>
       ${reasonTotal ? `<section class="card"><div class="card-title">How players were eliminated</div>
@@ -771,14 +792,17 @@
       </section>` : ''}`;
   }
   function renderHistory(v) {
-    v.innerHTML = `<header class="page-head"><div><div class="eyebrow">${data.games.length} game${data.games.length === 1 ? '' : 's'}</div><h1>History</h1></div></header>
-      ${data.games.length ? data.games.map((g) => {
+    const games = allGames(); const myId = me() ? me().id : null;
+    const recName = (g) => { const m = memberById(g.recordedBy); return m ? m.display_name : ''; };
+    v.innerHTML = `<header class="page-head"><div><div class="eyebrow">${gm() ? esc(cloud.group().name) + ' · ' : ''}${games.length} game${games.length === 1 ? '' : 's'}</div><h1>History</h1></div>${gm() ? syncPill() : ''}</header>
+      ${games.length ? games.map((g) => {
         const ps = g.players.slice().sort((a, b) => (a.place || 99) - (b.place || 99));
         const w = g.winnerIndex != null ? g.players[g.winnerIndex] : null;
-        return `<div class="card game-card"><div class="gc-head"><div><b>${fmtDate(g.endedAt)}</b> <span class="muted small">${fmtTime(g.startedAt)}</span><div class="muted small">${g.playerCount} players · ${fmtDur(g.durationMs)}${g.turns ? ` · ${g.turns} turns` : ''} · ${g.startingLife} life</div></div>
-          <button class="icon-btn danger" data-act="deleteGame" data-id="${g.id}" aria-label="Delete game">${I.trash}</button></div>
-          <div class="gc-winner">${w ? `🏆 <b>${esc(w.name)}</b> ${w.commanderName ? `<span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}` : ''}` : '<b>Draw</b>'}</div>
-          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis"><b>${esc(p.name)}</b> ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="muted small nowrap">${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${p.wentFirst ? ' · went 1st' : ''}</span></div>`).join('')}</div></div>`;
+        return `<div class="card game-card"><div class="gc-head"><div><b>${fmtDate(g.endedAt)}</b> <span class="muted small">${fmtTime(g.startedAt)}</span><div class="muted small">${g.playerCount} players · ${fmtDur(g.durationMs)}${g.turns ? ` · ${g.turns} turns` : ''} · ${g.startingLife} life</div>
+          ${gm() ? `<div class="muted small">${cloud.isPending(g.id) ? '<span class="pend-badge">⟳ waiting to sync</span> ' : ''}${recName(g) ? 'recorded by ' + esc(recName(g)) : ''}</div>` : ''}</div>
+          ${!gm() || g.recordedBy === myId ? `<button class="icon-btn danger" data-act="deleteGame" data-id="${g.id}" aria-label="Delete game">${I.trash}</button>` : ''}</div>
+          <div class="gc-winner">${w ? `🏆 <b>${esc(pName(w))}</b> ${w.commanderName ? `<span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}` : ''}` : '<b>Draw</b>'}</div>
+          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis"><b>${esc(pName(p))}</b>${gm() && !p.userId ? ' <span class="guest-tag">Guest</span>' : ''} ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="muted small nowrap">${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${p.wentFirst ? ' · went 1st' : ''}</span></div>`).join('')}</div></div>`;
       }).join('') : '<div class="empty"><div class="empty-ico">🕰️</div><p>No games yet.</p><p class="muted small">Saved games appear here. You can delete a wrong entry anytime.</p></div>'}`;
   }
 
@@ -787,6 +811,7 @@
     const s = data.settings;
     const size = new Blob([localStorage.getItem(STORE_KEY) || '']).size;
     v.innerHTML = `<header class="page-head"><div><div class="eyebrow">Commander Tracker ${APP_VERSION}</div><h1>Settings</h1></div></header>
+      ${accountSectionHtml()}
       <section class="card"><div class="card-title">Defaults</div>
         <div class="field"><label>Default starting life</label><div class="seg">${LIFE_PRESETS.map((n) => `<button data-act="defLife" data-v="${n}" class="${s.startingLife === n ? 'on' : ''}">${n}</button>`).join('')}</div></div>
         <div class="field"><label>Default players</label><div class="seg">${[2, 3, 4, 5, 6].map((n) => `<button data-act="defCount" data-v="${n}" class="${s.playerCount === n ? 'on' : ''}">${n}</button>`).join('')}</div></div>
@@ -794,7 +819,7 @@
         <label class="switch-row"><span>Random first player at start</span><input type="checkbox" data-bind="randomFirst" ${s.randomFirst ? 'checked' : ''}><i class="switch"></i></label>
       </section>
       <section class="card"><div class="card-title">Backup</div>
-        <p class="muted small">All data is stored only on this device (${data.commanders.length} commanders, ${data.games.length} games, ${(size / 1024).toFixed(1)} KB). Export a backup regularly — e.g. save it to Files or iCloud Drive.</p>
+        <p class="muted small">${gm() ? 'Local (offline) data on this device — group games are stored online. ' : ''}All data is stored only on this device (${data.commanders.length} commanders, ${data.games.length} games, ${(size / 1024).toFixed(1)} KB). Export a backup regularly — e.g. save it to Files or iCloud Drive.</p>
         <div class="row2"><button class="btn primary" data-act="exportData">Export JSON</button><label class="btn">Import JSON<input type="file" accept="application/json,.json" data-bind="importFile" hidden></label></div>
         <button class="btn ghost block" data-act="copyData">Copy backup to clipboard</button>
       </section>
@@ -841,6 +866,502 @@
   }
   function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
 
+  // ---------- online playgroups (UI on top of cloud.js) ----------
+  const cloud = window.EDHCloud && window.EDHCloud.available ? window.EDHCloud : null;
+  const me = () => (cloud ? cloud.user() : null);
+  const gm = () => !!(cloud && cloud.user() && cloud.groupId()); // group mode
+  const cd = () => cloud.data();
+  const PROFILE_COLORS = ['#ff6b61', '#ffbe4d', '#4fd08a', '#3fd6d0', '#5ea8ff', '#8b6cff', '#e06bb0', '#c9ced9'];
+  function allGames() { return gm() ? cd().games : data.games; }
+  function memberById(id) { return gm() && id ? cd().members.find((m) => m.id === id) || null : null; }
+  function deckById(id) { return gm() && id ? cd().decks.find((d) => d.id === id) || null : null; }
+  // commander info by id: group deck (online) or local commander
+  function cmdLookup(id) {
+    const d = deckById(id); if (d) return { name: d.commander, partner: d.partner || '', colors: d.colors || [], deckName: d.name || '', ownerId: d.owner_id };
+    return getCmd(id);
+  }
+  function pName(p) { const m = memberById(p.userId); return m ? m.display_name : p.name; }
+  function pKey(p) { return p.userId ? 'u:' + p.userId : 'n:' + String(p.name || '').trim().toLowerCase(); }
+  const deckLabel = (d) => (d.partner ? `${d.commander} + ${d.partner}` : d.commander);
+  function syncPill() {
+    if (!cloud || !me()) return '';
+    const n = cloud.pending();
+    if (cloud.offline()) return `<span class="sync-pill off">● Offline${n ? ` · ${n} pending` : ''}</span>`;
+    return n ? `<button class="sync-pill" data-act="syncNow">⟳ ${n} pending sync</button>` : '';
+  }
+  function dot(color, cls = '') { return `<span class="p-dot ${cls}" style="background:${esc(color || '#8b93ab')}"></span>`; }
+
+  let renderQueued = false;
+  function requestRender() {
+    if (!$('#game').hidden) return; // never disturb a running game
+    const ae = document.activeElement;
+    if ($('.overlay') || (ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName))) { renderQueued = true; return; }
+    renderQueued = false; renderTab();
+  }
+  if (cloud) cloud.on(requestRender);
+  window.addEventListener('online', requestRender);
+  window.addEventListener('offline', requestRender);
+
+  // ----- auth -----
+  function openAuth(mode = 'signin', opts = {}) {
+    if (!cloud) { toast('Online features need a connection the first time — try again when online.'); return; }
+    let color = PROFILE_COLORS[rand(PROFILE_COLORS.length)];
+    const ov = openSheet(`<div class="sheet-head"><h2 data-role="title"></h2><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sheet-body">
+        ${opts.note ? `<div class="note-card">${opts.note}</div>` : ''}
+        <div class="seg auth-seg"><button data-mode="signin">Sign in</button><button data-mode="signup">Create account</button></div>
+        <form data-role="form" autocomplete="on">
+          <div class="field"><label>Username</label><input type="text" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="20" placeholder="e.g. daniele" required></div>
+          <div class="field"><label>Password</label><input type="password" name="password" autocomplete="current-password" minlength="6" maxlength="72" placeholder="At least 6 characters" required></div>
+          <div class="signup-only">
+            <div class="field"><label>Display name <span class="muted">(shown to your group)</span></label><input type="text" name="display" maxlength="24" autocapitalize="words" placeholder="e.g. Daniele"></div>
+            <div class="field"><label>Color</label><div class="swatches">${PROFILE_COLORS.map((c) => `<button type="button" class="swatch" data-color="${c}" style="background:${c}"></button>`).join('')}</div></div>
+            <p class="muted small">No email needed. Usernames are lowercase letters, numbers or _. There's no password reset, so pick one you'll remember.</p>
+          </div>
+          <div class="form-error" data-role="err"></div>
+          <button class="btn primary big block" type="submit" data-role="submit"></button>
+        </form>
+      </div>`, { cls: 'tall' });
+    const form = ov.querySelector('[data-role=form]');
+    const setMode = (m) => {
+      mode = m;
+      ov.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
+      ov.querySelector('.signup-only').hidden = m !== 'signup';
+      ov.querySelector('[data-role=title]').textContent = m === 'signup' ? 'Create account' : 'Sign in';
+      ov.querySelector('[data-role=submit]').textContent = m === 'signup' ? 'Create account' : 'Sign in';
+      form.password.autocomplete = m === 'signup' ? 'new-password' : 'current-password';
+      ov.querySelector('[data-role=err]').textContent = '';
+    };
+    const paintSwatches = () => ov.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('on', s.dataset.color === color));
+    ov.addEventListener('click', (e) => {
+      const m = e.target.closest('[data-mode]'); if (m) { setMode(m.dataset.mode); return; }
+      const s = e.target.closest('.swatch'); if (s) { color = s.dataset.color; paintSwatches(); }
+    });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = ov.querySelector('[data-role=err]'); const btn = ov.querySelector('[data-role=submit]');
+      err.textContent = ''; btn.disabled = true; const label = btn.textContent; btn.textContent = 'Please wait…';
+      try {
+        const u = form.username.value.trim().toLowerCase(); const pw = form.password.value;
+        if (mode === 'signup') {
+          const r = await cloud.signUp(u, pw, form.display.value.trim() || u, color);
+          if (r.needsConfirmation) {
+            err.innerHTML = 'Account created, but the server still requires <b>email confirmation</b>, so you can\'t sign in yet. The group admin needs to turn off “Confirm email” in the Supabase dashboard.';
+            return;
+          }
+        } else {
+          await cloud.signIn(u, pw);
+        }
+        closeOverlay(ov); toast(`Signed in as ${me().display_name}`);
+        renderTab();
+        if (opts.onDone) opts.onDone(); else afterSignIn();
+      } catch (ex) { err.textContent = ex.message || String(ex); } finally { btn.disabled = false; btn.textContent = label; }
+    });
+    setMode(mode); paintSwatches();
+  }
+  function afterSignIn() {
+    if (pendingJoinCode()) { handlePendingJoin(); return; }
+    if (!cloud.groups().length) { setTab('settings'); toast('Create a playgroup or join one with an invite code'); return; }
+    maybeOfferMigration();
+  }
+
+  // ----- invite links (?join=CODE) -----
+  const JOIN_KEY = 'edh-tracker:pendingJoin';
+  const pendingJoinCode = () => localStorage.getItem(JOIN_KEY);
+  function captureJoinParam() {
+    const q = new URLSearchParams(location.search); const code = (q.get('join') || '').trim().toUpperCase();
+    if (!code) return;
+    if (/^[A-Z0-9]{8}$/.test(code)) localStorage.setItem(JOIN_KEY, code);
+    q.delete('join'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+  }
+  function inviteLink(code) { return `${location.origin}${location.pathname}?join=${code}`; }
+  async function handlePendingJoin() {
+    const code = pendingJoinCode(); if (!code) return;
+    if (!cloud) { toast('Open the app online to join the playgroup'); return; }
+    if (!me()) {
+      const ov = openSheet(`<div class="sheet-head"><h2>You're invited!</h2><button class="icon-btn" data-close>${I.close}</button></div>
+        <div class="sheet-body"><p>Join the playgroup with invite code</p><div class="invite-code">${code}</div>
+        ${isIOS && !isStandalone() ? '<div class="note-card"><b>Tip:</b> first add this app to your Home Screen (Share → Add to Home Screen), open it from there, then create your account and enter this code in Settings → Join with code. The Home Screen app keeps its own sign-in.</div>' : ''}
+        <button class="btn primary big block" data-a="signup">Create account & join</button><button class="btn block" data-a="signin">I have an account</button>
+        <button class="btn ghost block" data-a="copy">Copy code</button></div>`, { cls: 'tall' });
+      ov.addEventListener('click', async (e) => {
+        const a = e.target.closest('[data-a]'); if (!a) return;
+        if (a.dataset.a === 'copy') { try { await navigator.clipboard.writeText(code); toast('Code copied'); } catch (x) { toast(code); } return; }
+        closeOverlay(ov); openAuth(a.dataset.a, { onDone: () => handlePendingJoin() });
+      });
+      return;
+    }
+    if (!(await confirmDialog(`Join the playgroup with code <b>${esc(code)}</b>?`, 'Join'))) { localStorage.removeItem(JOIN_KEY); return; }
+    try {
+      const g = await cloud.joinGroup(code); localStorage.removeItem(JOIN_KEY);
+      toast(`Joined ${g.name}`); renderTab(); maybeOfferMigration();
+    } catch (e) { toast(e.message); if (/not found/i.test(e.message)) localStorage.removeItem(JOIN_KEY); }
+  }
+
+  // ----- settings: account + playgroup -----
+  function accountSectionHtml() {
+    if (!cloud) return `<section class="card"><div class="card-title">Playgroup</div><p class="muted small">Online features load when you're connected. Everything else works offline.</p></section>`;
+    const u = me();
+    if (!u) {
+      return `<section class="card account-card"><div class="card-title">Playgroup (online)</div>
+        <p class="muted small">Sign in so your friends can load their decks, and games & stats are shared with your playgroup. Without an account the app keeps working locally on this phone.</p>
+        <div class="row2"><button class="btn primary" data-act="authSignup">Create account</button><button class="btn" data-act="authSignin">Sign in</button></div>
+        ${pendingJoinCode() ? `<p class="small">Pending invite: <b>${esc(pendingJoinCode())}</b></p>` : ''}</section>`;
+    }
+    const groups = cloud.groups(); const g = cloud.group(); const pend = cloud.pending();
+    return `<section class="card account-card"><div class="card-title">Account</div>
+        <div class="acct-row">${dot(u.color, 'lg')}<div class="grow"><b>${esc(u.display_name)}</b><div class="muted small">@${esc(u.username)}</div></div><button class="btn sm" data-act="editProfile">Edit</button></div>
+        <div class="sync-row"><span class="muted small">${pend ? `${pend} game${pend === 1 ? '' : 's'} waiting to upload` : cloud.lastSync() ? 'All games synced' : 'Synced'}${cloud.lastError() ? ` · <span class="err-text">${esc(cloud.lastError())}</span>` : ''}</span>
+        <button class="btn sm ghost" data-act="syncNow">Sync now</button></div>
+        <button class="btn ghost block danger-text" data-act="signOut">Sign out</button>
+      </section>
+      <section class="card"><div class="card-title">Playgroup</div>
+        ${groups.length > 1 ? `<div class="field"><label>Current group</label><select class="select" data-bind="groupSel">${groups.map((x) => `<option value="${x.id}" ${x.id === cloud.groupId() ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>` : ''}
+        ${g ? `<div class="group-name">${esc(g.name)} <span class="muted small">· ${cd().members.length} member${cd().members.length === 1 ? '' : 's'}${g.role === 'owner' ? ' · you created it' : ''}</span></div>
+          <div class="muted small">Invite code</div><div class="invite-code">${esc(g.invite_code)}</div>
+          <div class="row2"><button class="btn primary" data-act="shareInvite">Share invite link</button><button class="btn" data-act="copyCode">Copy code</button></div>
+          <div class="member-list">${cd().members.map((m) => `<div class="member">${dot(m.color)}<span>${esc(m.display_name)}</span><span class="muted small">@${esc(m.username)}${m.role === 'owner' ? ' · owner' : ''}</span></div>`).join('')}</div>`
+        : '<p class="muted small">You are not in a playgroup yet. Create one and share the invite code with your friends, or join a friend\'s group.</p>'}
+        <div class="row2"><button class="btn" data-act="createGroup">Create group</button><button class="btn" data-act="joinGroupPrompt">Join with code</button></div>
+        ${g && (data.commanders.length || data.games.length) ? '<button class="btn ghost block" data-act="migrate">Upload local data to this group</button>' : ''}
+        ${g ? '<button class="btn ghost block danger-text" data-act="leaveGroup">Leave group</button>' : ''}
+      </section>`;
+  }
+  function promptText(title, label, value = '', opts = {}) {
+    return new Promise((resolve) => {
+      let result = null;
+      const ov = openSheet(`<div class="dialog-body"><h2>${esc(title)}</h2><div class="field"><label>${esc(label)}</label>
+        <input type="text" data-role="in" value="${esc(value)}" maxlength="${opts.max || 40}" ${opts.upper ? 'autocapitalize="characters" style="text-transform:uppercase;letter-spacing:.15em"' : 'autocapitalize="words"'} autocomplete="off"></div>
+        <div class="dialog-actions"><button class="btn primary" data-role="ok">${esc(opts.ok || 'OK')}</button><button class="btn ghost" data-close>Cancel</button></div></div>`, { dialog: true, onClose: () => resolve(result) });
+      const inp = ov.querySelector('[data-role=in]');
+      const done = () => { result = inp.value.trim(); if (result) closeOverlay(ov); };
+      ov.querySelector('[data-role=ok]').addEventListener('click', done);
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(); });
+      setTimeout(() => inp.focus(), 250);
+    });
+  }
+  function editProfile() {
+    const u = me(); let color = u.color || PROFILE_COLORS[0];
+    const ov = openSheet(`<div class="dialog-body"><h2>Your profile</h2>
+      <div class="field"><label>Display name</label><input type="text" data-role="dn" value="${esc(u.display_name)}" maxlength="24"></div>
+      <div class="field"><label>Color</label><div class="swatches">${PROFILE_COLORS.map((c) => `<button type="button" class="swatch" data-color="${c}" style="background:${c}"></button>`).join('')}</div></div>
+      <div class="dialog-actions"><button class="btn primary" data-role="ok">Save</button><button class="btn ghost" data-close>Cancel</button></div></div>`, { dialog: true });
+    const paint = () => ov.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('on', s.dataset.color === color));
+    ov.addEventListener('click', async (e) => {
+      const s = e.target.closest('.swatch'); if (s) { color = s.dataset.color; paint(); return; }
+      if (!e.target.closest('[data-role=ok]')) return;
+      try { await cloud.updateProfile({ display_name: ov.querySelector('[data-role=dn]').value, color }); closeOverlay(ov); toast('Profile saved'); renderTab(); } catch (x) { toast(x.message); }
+    });
+    paint();
+  }
+
+  // ----- local data → group migration -----
+  function maybeOfferMigration() {
+    const gid = cloud && cloud.groupId();
+    if (!gid || cloud.isMigrated(gid) || (!data.commanders.length && !data.games.length)) return;
+    setTimeout(() => openMigration(gid), 400);
+  }
+  function openMigration(gid) {
+    const u = me(); const members = cd().members;
+    const names = new Map();
+    data.games.forEach((g) => g.players.forEach((p) => { const k = p.name.trim().toLowerCase(); if (k && !names.has(k)) names.set(k, p.name.trim()); }));
+    data.commanders.forEach((c) => { const k = (c.owner || '').trim().toLowerCase(); if (k && !names.has(k)) names.set(k, c.owner.trim()); });
+    const guess = (k) => {
+      if (k === u.username || k === u.display_name.toLowerCase()) return 'me';
+      const m = members.find((x) => x.id !== u.id && (x.username === k || x.display_name.toLowerCase() === k));
+      return m ? 'u:' + m.id : 'guest';
+    };
+    const map = {}; names.forEach((_, k) => { map[k] = guess(k); });
+    const ov = openSheet(`<div class="sheet-head"><h2>Upload local data</h2><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sheet-body">
+        <p class="muted small">Copy what's on this phone into <b>${esc(cloud.group().name)}</b>. Your local data stays on the phone as it is.</p>
+        <label class="check-row"><input type="checkbox" data-role="decks" checked><span>Add my local commanders as my decks <b data-role="nd"></b></span></label>
+        <label class="check-row"><input type="checkbox" data-role="games" ${data.games.length ? 'checked' : 'disabled'}><span>Upload ${data.games.length} local game${data.games.length === 1 ? '' : 's'} to the group</span></label>
+        ${names.size ? `<div class="sec-title">Who is who?</div><p class="muted small">Match the names used on this phone to group members. Everyone else is saved as a guest.</p>
+        ${[...names].map(([k, n]) => `<div class="map-row"><span class="grow ellipsis"><b>${esc(n)}</b></span><select class="select sm" data-name="${esc(k)}">
+          <option value="me" ${map[k] === 'me' ? 'selected' : ''}>Me (${esc(u.display_name)})</option>
+          ${members.filter((m) => m.id !== u.id).map((m) => `<option value="u:${m.id}" ${map[k] === 'u:' + m.id ? 'selected' : ''}>${esc(m.display_name)}</option>`).join('')}
+          <option value="guest" ${map[k] === 'guest' ? 'selected' : ''}>Guest “${esc(n)}”</option></select></div>`).join('')}` : ''}
+        <div class="sheet-actions"><button class="btn ghost" data-a="never">Don't ask again</button><button class="btn primary grow" data-a="go">Upload</button></div>
+      </div>`, { cls: 'tall' });
+    const mine = () => data.commanders.filter((c) => !c.owner.trim() || map[c.owner.trim().toLowerCase()] === 'me');
+    const paintCount = () => { ov.querySelector('[data-role=nd]').textContent = `(${mine().length})`; };
+    ov.addEventListener('change', (e) => { const s = e.target.closest('select[data-name]'); if (s) { map[s.dataset.name] = s.value; paintCount(); } });
+    ov.addEventListener('click', async (e) => {
+      const a = e.target.closest('[data-a]'); if (!a) return;
+      if (a.dataset.a === 'never') { cloud.markMigrated(gid); closeOverlay(ov); return; }
+      a.disabled = true; a.textContent = 'Uploading…';
+      try {
+        const deckMap = {};
+        if (ov.querySelector('[data-role=decks]').checked) {
+          if (!cloud.online()) throw new Error('Connect to the internet to upload decks.');
+          const existing = cd().decks.filter((d) => d.owner_id === u.id);
+          for (const c of mine()) {
+            const same = existing.find((d) => d.commander.toLowerCase() === c.name.toLowerCase() && (d.partner || '').toLowerCase() === (c.partner || '').toLowerCase());
+            deckMap[c.id] = same ? same.id : (await cloud.saveDeck({ commander: c.name, partner: c.partner, colors: c.colors })).id;
+          }
+        }
+        let n = 0;
+        if (ov.querySelector('[data-role=games]').checked) {
+          [...data.games].reverse().forEach((g) => {
+            const players = g.players.map((p) => {
+              const who = map[p.name.trim().toLowerCase()] || 'guest';
+              const base = { ...p };
+              if (who === 'me') return { ...base, kind: 'member', userId: u.id, name: u.display_name, deckId: deckMap[p.commanderId] || null, commanderId: deckMap[p.commanderId] || null };
+              if (who.startsWith('u:')) { const m = members.find((x) => 'u:' + x.id === who); return { ...base, kind: 'member', userId: m.id, name: m.display_name, deckId: null, commanderId: null }; }
+              return { ...base, kind: 'guest', guestId: null, deckId: null, commanderId: null };
+            });
+            cloud.queueGame(gid, { ...g, id: cloud.uuid(), players }); n++;
+          });
+        }
+        cloud.markMigrated(gid); closeOverlay(ov);
+        toast(`Uploaded ${Object.keys(deckMap).length} deck${Object.keys(deckMap).length === 1 ? '' : 's'}${n ? ` and queued ${n} game${n === 1 ? '' : 's'}` : ''}`);
+        renderTab();
+      } catch (x) { toast(x.message || String(x)); a.disabled = false; a.textContent = 'Upload'; }
+    });
+    paintCount();
+  }
+
+  // ----- group game setup -----
+  function groupSeats() {
+    const gid = cloud.groupId();
+    data.groupSetups = data.groupSetups || {};
+    const seats = data.groupSetups[gid] || (data.groupSetups[gid] = []);
+    while (seats.length < 6) seats.push({ kind: null });
+    return seats;
+  }
+  function knownGuests() {
+    const map = new Map();
+    cd().guests.forEach((g) => map.set(g.name.trim().toLowerCase(), { name: g.name, id: g.id }));
+    cd().games.forEach((g) => g.players.forEach((p) => { if (p.kind === 'guest') { const k = p.name.trim().toLowerCase(); if (!map.has(k)) map.set(k, { name: p.name, id: p.guestId || null }); } }));
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  function guestCommanders(name) {
+    const k = String(name || '').trim().toLowerCase(); const out = new Map();
+    cd().games.forEach((g) => g.players.forEach((p) => {
+      if (p.kind === 'guest' && p.name.trim().toLowerCase() === k && p.commanderName) {
+        const key = (p.commanderName + '|' + (p.partnerName || '')).toLowerCase();
+        if (!out.has(key)) out.set(key, { name: p.commanderName, partner: p.partnerName || '', colors: p.colors || [] });
+      }
+    }));
+    return [...out.values()];
+  }
+  function allKnownCommanders() {
+    const out = new Map();
+    const add = (name, partner, colors) => { const key = (name + '|' + (partner || '')).toLowerCase(); if (name && !out.has(key)) out.set(key, { name, partner: partner || '', colors: colors || [] }); };
+    cd().decks.forEach((d) => add(d.commander, d.partner, d.colors));
+    cd().games.forEach((g) => g.players.forEach((p) => add(p.commanderName, p.partnerName, p.colors)));
+    data.commanders.forEach((c) => add(c.name, c.partner, c.colors));
+    return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  function seatSummary(seat) {
+    if (seat.kind === 'member') {
+      const m = memberById(seat.userId); const d = deckById(seat.deckId);
+      return { player: m ? `${dot(m.color)}<span class="ellipsis">${esc(m.display_name)}</span>` : '', deck: d ? `<span class="pips">${pips(d.colors)}</span><span class="ellipsis">${esc(deckLabel(d))}</span>` : '' };
+    }
+    if (seat.kind === 'guest') {
+      const c = seat.commander;
+      return { player: `<span class="guest-tag">Guest</span><span class="ellipsis">${esc(seat.name)}</span>`, deck: c && c.name ? `<span class="pips">${pips(c.colors)}</span><span class="ellipsis">${esc(c.partner ? `${c.name} + ${c.partner}` : c.name)}</span>` : '' };
+    }
+    return { player: '', deck: '' };
+  }
+  function renderGroupPlay(v) {
+    const s = getSetup(); const seats = groupSeats(); const g = data.current; const grp = cloud.group();
+    v.innerHTML = `
+    <header class="page-head"><div><div class="eyebrow">${esc(grp ? grp.name : 'Playgroup')}</div><h1>New game</h1></div>${syncPill()}</header>
+    ${g ? `<div class="card resume"><div><b>Game in progress</b><div class="muted small">${g.players.length} players · started ${fmtTime(g.startedAt)}</div></div>
+      <div class="row"><button class="btn ghost sm" data-act="discardGame">Discard</button><button class="btn primary sm" data-act="resumeGame">Resume</button></div></div>` : ''}
+    <section class="card">
+      <div class="field"><label>Players</label><div class="seg">${[2, 3, 4, 5, 6].map((n) => `<button data-act="setCount" data-v="${n}" class="${s.count === n ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+      <div class="field"><label>Starting life</label><div class="seg" id="life-seg">${LIFE_PRESETS.map((n) => `<button data-act="setLife" data-v="${n}" class="${s.life === n ? 'on' : ''}">${n}</button>`).join('')}
+        <input class="seg-input ${LIFE_PRESETS.includes(s.life) ? '' : 'on'}" type="number" inputmode="numeric" min="1" max="999" placeholder="Other" value="${LIFE_PRESETS.includes(s.life) ? '' : s.life}" data-bind="customLife"></div></div>
+      <label class="switch-row"><span>Random first player</span><input type="checkbox" data-bind="randomFirst" ${data.settings.randomFirst ? 'checked' : ''}><i class="switch"></i></label>
+    </section>
+    <section class="card">
+      <div class="card-title">Seats <span class="muted small">members or guests, clockwise</span></div>
+      ${seats.slice(0, s.count).map((seat, i) => {
+        const sum = seatSummary(seat);
+        return `<div class="seat-row group-seat" data-seat="${i}"><span class="seat-dot seat-${i}">${i + 1}</span>
+          <div class="seat-fields">
+            <button class="cmd-pick ${sum.player ? '' : 'empty'}" data-act="pickSeatPlayer" data-i="${i}">${sum.player || '<span>Choose player…</span>'}</button>
+            <button class="cmd-pick ${sum.deck ? '' : 'empty'}" data-act="pickSeatDeck" data-i="${i}" ${seat.kind ? '' : 'disabled'}>${sum.deck || `<span>${seat.kind === 'guest' ? 'Commander they play…' : 'Choose deck…'}</span>`}</button>
+          </div></div>`;
+      }).join('')}
+    </section>
+    <button class="btn primary big block" data-act="startGame">Start game</button>`;
+  }
+  function openSeatPlayerPicker(i) {
+    const seats = groupSeats(); const u = me();
+    const taken = new Set(seats.slice(0, getSetup().count).filter((x, j) => j !== i && x.kind === 'member').map((x) => x.userId));
+    const guests = knownGuests();
+    const ov = openSheet(`<div class="sheet-head"><h2>Seat ${i + 1}: who's playing?</h2><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sheet-body">
+        <div class="sec-title">Group members</div>
+        <div class="pick-list">${cd().members.map((m) => `<button class="pick-row ${seats[i].userId === m.id ? 'on' : ''}" data-member="${m.id}" ${taken.has(m.id) ? 'disabled' : ''}>${dot(m.color, 'lg')}<span class="pr-main"><b>${esc(m.display_name)}${m.id === u.id ? ' (you)' : ''}</b><small>${cd().decks.filter((d) => d.owner_id === m.id).length} decks${taken.has(m.id) ? ' · already seated' : ''}</small></span></button>`).join('')}</div>
+        <div class="sec-title">Guests <span class="muted">(people without the app)</span></div>
+        <div class="guest-new"><input type="text" data-role="gname" placeholder="New guest name" maxlength="24" autocapitalize="words" autocomplete="off"><button class="btn primary" data-role="gadd">Add</button></div>
+        <div class="chip-list">${guests.map((g) => `<button class="gchip ${seats[i].kind === 'guest' && seats[i].name.toLowerCase() === g.name.toLowerCase() ? 'on' : ''}" data-guest="${esc(g.name)}">${esc(g.name)}</button>`).join('') || '<span class="muted small">Guests you add are remembered for next time.</span>'}</div>
+        ${seats[i].kind ? '<button class="btn ghost block" data-role="clear">Clear seat</button>' : ''}
+      </div>`, { cls: 'tall' });
+    const pickGuest = (name) => {
+      name = name.trim(); if (!name) return;
+      const prev = seats[i].kind === 'guest' && seats[i].name.toLowerCase() === name.toLowerCase() ? seats[i].commander : null;
+      const last = guestCommanders(name)[0] || null;
+      seats[i] = { kind: 'guest', name, commander: prev || last };
+      save(); closeOverlay(ov); renderTab();
+      if (!seats[i].commander) setTimeout(() => openGuestCommanderPicker(i), 250);
+    };
+    ov.addEventListener('click', (e) => {
+      const m = e.target.closest('[data-member]');
+      if (m) {
+        const decks = cd().decks.filter((d) => d.owner_id === m.dataset.member);
+        const keep = seats[i].userId === m.dataset.member ? seats[i].deckId : null;
+        seats[i] = { kind: 'member', userId: m.dataset.member, deckId: keep || (decks.length === 1 ? decks[0].id : null) };
+        save(); closeOverlay(ov); renderTab();
+        if (!seats[i].deckId && decks.length > 1) setTimeout(() => openSeatDeckPicker(i), 250);
+        return;
+      }
+      const gch = e.target.closest('[data-guest]'); if (gch) { pickGuest(gch.dataset.guest); return; }
+      if (e.target.closest('[data-role=gadd]')) { pickGuest(ov.querySelector('[data-role=gname]').value); return; }
+      if (e.target.closest('[data-role=clear]')) { seats[i] = { kind: null }; save(); closeOverlay(ov); renderTab(); }
+    });
+    ov.querySelector('[data-role=gname]').addEventListener('keydown', (e) => { if (e.key === 'Enter') pickGuest(e.target.value); });
+  }
+  function openSeatDeckPicker(i) {
+    const seats = groupSeats(); const seat = seats[i];
+    if (seat.kind === 'guest') { openGuestCommanderPicker(i); return; }
+    if (seat.kind !== 'member') return;
+    const m = memberById(seat.userId); const decks = cd().decks.filter((d) => d.owner_id === seat.userId); const mine = seat.userId === me().id;
+    const ov = openSheet(`<div class="sheet-head"><h2>${esc(m ? m.display_name : 'Player')}'s deck</h2><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sheet-body"><div class="pick-list">
+        ${mine ? '<button class="pick-row new" data-new>+ New deck</button>' : ''}
+        ${decks.map((d) => `<button class="pick-row ${d.id === seat.deckId ? 'on' : ''}" data-deck="${d.id}"><span class="pips">${pips(d.colors)}</span><span class="pr-main"><b>${esc(deckLabel(d))}</b>${d.name ? `<small>${esc(d.name)}</small>` : ''}</span></button>`).join('')}
+        ${!decks.length ? `<p class="muted small center">${mine ? 'You have no decks yet.' : 'No decks yet — they can add decks in their own app (Commanders tab).'}</p>` : ''}
+        <button class="pick-row clear" data-deck="">No deck</button></div></div>`, { cls: 'tall' });
+    ov.addEventListener('click', (e) => {
+      if (e.target.closest('[data-new]')) { closeOverlay(ov); openDeckEditor(null, { onSave: (d) => { seat.deckId = d.id; save(); renderTab(); } }); return; }
+      const b = e.target.closest('[data-deck]'); if (!b) return;
+      seat.deckId = b.dataset.deck || null; save(); closeOverlay(ov); renderTab();
+    });
+  }
+  function openGuestCommanderPicker(i) {
+    const seat = groupSeats()[i]; if (seat.kind !== 'guest') return;
+    const theirs = guestCommanders(seat.name); const all = allKnownCommanders();
+    let q = '';
+    const ov = openSheet(`<div class="sheet-head"><h2>${esc(seat.name)}'s commander</h2><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sheet-body"><input type="search" class="search" data-role="q" placeholder="Search or type a commander" autocomplete="off" autocapitalize="words">
+      <div class="pick-list" data-role="list"></div></div>`, { cls: 'tall' });
+    const list = ov.querySelector('[data-role=list]');
+    const row = (c, tag) => `<button class="pick-row" data-c="${esc(JSON.stringify(c))}"><span class="pips">${pips(c.colors)}</span><span class="pr-main"><b>${esc(c.partner ? `${c.name} + ${c.partner}` : c.name)}</b>${tag ? `<small>${tag}</small>` : ''}</span></button>`;
+    const draw = () => {
+      const ql = q.trim().toLowerCase(); const f = (c) => !ql || (c.name + ' ' + c.partner).toLowerCase().includes(ql);
+      const mineKeys = new Set(theirs.map((c) => (c.name + '|' + c.partner).toLowerCase()));
+      const exact = all.some((c) => c.name.toLowerCase() === ql);
+      list.innerHTML = `${ql && !exact ? `<button class="pick-row new" data-new>+ Use “${esc(q.trim())}”</button>` : ''}
+        ${theirs.filter(f).map((c) => row(c, `played by ${esc(seat.name)} before`)).join('')}
+        ${all.filter((c) => f(c) && !mineKeys.has((c.name + '|' + c.partner).toLowerCase())).map((c) => row(c, '')).join('')}
+        ${!ql ? '<button class="pick-row new" data-new>+ Other commander</button>' : ''}`;
+    };
+    ov.querySelector('[data-role=q]').addEventListener('input', (e) => { q = e.target.value; draw(); });
+    list.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-new')) { closeOverlay(ov); openGuestCommanderForm(i, q.trim()); return; }
+      seat.commander = JSON.parse(b.dataset.c); save(); closeOverlay(ov); renderTab();
+    });
+    draw();
+  }
+  function openGuestCommanderForm(i, name) {
+    const seat = groupSeats()[i]; const st = { colors: [] };
+    const ov = openSheet(`<div class="sheet-head"><h2>${esc(seat.name)}'s commander</h2><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sheet-body">
+        <div class="field"><label>Commander</label><input type="text" data-f="name" value="${esc(name)}" maxlength="80" autocapitalize="words"></div>
+        <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" maxlength="80" autocapitalize="words"></div>
+        <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x}" data-color="${x}">${x}</button>`).join('')}</div></div>
+        <button class="btn primary big block" data-a="ok">Use this commander</button></div>`, { cls: 'tall' });
+    ov.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-color]');
+      if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); return; }
+      if (!e.target.closest('[data-a=ok]')) return;
+      const n = ov.querySelector('[data-f=name]').value.trim(); if (!n) { toast('Enter the commander name'); return; }
+      seat.commander = { name: n, partner: ov.querySelector('[data-f=partner]').value.trim(), colors: st.colors };
+      save(); closeOverlay(ov); renderTab();
+    });
+  }
+  function groupPlayers(s) {
+    const seats = groupSeats().slice(0, s.count);
+    const ids = seats.filter((x) => x.kind === 'member').map((x) => x.userId);
+    if (new Set(ids).size !== ids.length) { toast('The same member is seated twice'); return null; }
+    return seats.map((seat, i) => {
+      const base = { id: 'p' + i, seat: i, life: s.life, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, killedBy: null };
+      if (seat.kind === 'member') {
+        const m = memberById(seat.userId); const d = deckById(seat.deckId);
+        return { ...base, kind: 'member', userId: seat.userId, name: m ? m.display_name : 'Player ' + (i + 1), deckId: d ? d.id : null, commanderId: d ? d.id : null, commanderName: d ? d.commander : '', partnerName: d ? d.partner || '' : '', colors: d ? d.colors.slice() : [] };
+      }
+      if (seat.kind === 'guest') {
+        const c = seat.commander || {}; const known = knownGuests().find((x) => x.name.toLowerCase() === seat.name.toLowerCase());
+        return { ...base, kind: 'guest', guestId: known ? known.id : null, name: seat.name, commanderId: null, commanderName: c.name || '', partnerName: c.partner || '', colors: c.colors || [] };
+      }
+      return { ...base, kind: 'guest', guestId: null, name: `Player ${i + 1}`, commanderId: null, commanderName: '', partnerName: '', colors: [] };
+    });
+  }
+
+  // ----- decks (group mode Commanders tab) -----
+  function renderDecks(v) {
+    const u = me(); const stats = commanderStats(); const empty = { games: 0, wins: 0, dur: 0, last: 0, kills: 0 };
+    const card = (d, editable) => { const s = stats.get(d.id) || empty; return `<button class="cmd-card" ${editable ? `data-act="editDeck" data-id="${d.id}"` : 'disabled'}>
+      <div class="cc-top"><span class="pips lg">${pips(d.colors)}</span><div class="cc-name"><b>${esc(d.commander)}</b>${d.partner ? `<small>+ ${esc(d.partner)}</small>` : ''}${d.name ? `<small class="owner">${esc(d.name)}</small>` : ''}</div>
+      <div class="cc-wr"><b>${pct(s.wins, s.games)}</b><small>win rate</small></div></div>
+      <div class="bar"><i style="width:${s.games ? Math.round((s.wins / s.games) * 100) : 0}%"></i></div>
+      <div class="cc-stats"><span><b>${s.games}</b> game${s.games === 1 ? '' : 's'}</span><span><b>${s.wins}</b> win${s.wins === 1 ? '' : 's'}</span><span><b>${s.games ? fmtDur(s.dur / s.games) : '—'}</b> avg</span>${s.kills ? `<span><b>${s.kills}</b> cmdr kills</span>` : ''}<span>${s.last ? 'Last ' + fmtShort(s.last) : 'Never played'}</span></div></button>`; };
+    const decks = cd().decks; const myDecks = decks.filter((d) => d.owner_id === u.id);
+    const others = cd().members.filter((m) => m.id !== u.id);
+    // guest commanders from game history
+    const gc = new Map();
+    cd().games.forEach((g) => g.players.forEach((p) => {
+      if (p.kind !== 'guest' || !p.commanderName) return;
+      const label = p.partnerName ? `${p.commanderName} + ${p.partnerName}` : p.commanderName; const k = p.name.toLowerCase() + '|' + label.toLowerCase();
+      const e = gc.get(k) || { who: p.name, label, colors: p.colors || [], g: 0, w: 0 }; e.g++; if (p.isWinner) e.w++; gc.set(k, e);
+    }));
+    v.innerHTML = `<header class="page-head"><div><div class="eyebrow">${esc(cloud.group().name)}</div><h1>Decks</h1></div><button class="btn primary sm" data-act="newDeck">+ Add</button></header>
+      <div class="sec-title">My decks</div>
+      ${myDecks.length ? myDecks.map((d) => card(d, true)).join('') : '<div class="card muted small">No decks yet. Add the decks you play so your group can pick them at game setup.</div>'}
+      ${others.map((m) => { const ds = decks.filter((d) => d.owner_id === m.id); return `<div class="sec-title">${dot(m.color)} ${esc(m.display_name)}'s decks</div>${ds.length ? ds.map((d) => card(d, false)).join('') : '<div class="card muted small">No decks yet.</div>'}`; }).join('')}
+      ${gc.size ? `<div class="sec-title">Guest commanders</div><section class="card">${[...gc.values()].sort((a, b) => b.g - a.g).map((e) => `<div class="bar-row"><span class="pips">${pips(e.colors)}</span><span class="bar-label"><b>${esc(e.label)}</b> <span class="muted small">${esc(e.who)}</span></span><div class="bar"><i style="width:${Math.round((e.w / e.g) * 100)}%"></i></div><span class="bar-val">${pct(e.w, e.g)}<small>${e.w}/${e.g}</small></span></div>`).join('')}</section>` : ''}`;
+  }
+  function openDeckEditor(id, opts = {}) {
+    if (!cloud.online()) { toast('Connect to the internet to edit decks'); return; }
+    const d = id ? deckById(id) : null;
+    const st = { colors: d ? d.colors.slice() : [] };
+    const s = d ? commanderStats().get(d.id) : null;
+    const ov = openSheet(`<div class="sheet-head"><h2>${d ? 'Edit deck' : 'New deck'}</h2><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sheet-body">
+        <div class="field"><label>Commander</label><input type="text" data-f="commander" value="${esc(d ? d.commander : '')}" maxlength="80" autocapitalize="words" placeholder="e.g. Atraxa, Praetors' Voice"></div>
+        <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" value="${esc(d ? d.partner || '' : '')}" maxlength="80" autocapitalize="words"></div>
+        <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
+        <div class="field"><label>Deck name <span class="muted">(optional)</span></label><input type="text" data-f="name" value="${esc(d ? d.name || '' : '')}" maxlength="60" placeholder="e.g. Superfriends"></div>
+        ${s ? `<div class="mini-stats"><div><b>${s.games}</b><span>games</span></div><div><b>${s.wins}</b><span>wins</span></div><div><b>${pct(s.wins, s.games)}</b><span>win rate</span></div><div><b>${fmtDur(s.dur / s.games)}</b><span>avg game</span></div></div>` : ''}
+        <div class="sheet-actions">${d ? '<button class="btn danger-text" data-a="delete">Delete</button>' : ''}<button class="btn primary grow" data-a="save">${d ? 'Save' : 'Add deck'}</button></div>
+      </div>`, { cls: 'tall' });
+    ov.addEventListener('click', async (e) => {
+      const t = e.target.closest('[data-color]');
+      if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); return; }
+      const a = e.target.closest('[data-a]'); if (!a) return;
+      try {
+        if (a.dataset.a === 'save') {
+          const f = (k) => ov.querySelector(`[data-f=${k}]`).value.trim();
+          if (!f('commander')) { toast('Enter the commander name'); return; }
+          a.disabled = true;
+          const saved = await cloud.saveDeck({ id: d && d.id, commander: f('commander'), partner: f('partner'), name: f('name'), colors: st.colors });
+          closeOverlay(ov); toast(d ? 'Deck saved' : 'Deck added');
+          if (opts.onSave) opts.onSave(saved); else renderTab();
+        } else if (a.dataset.a === 'delete') {
+          if (!(await confirmDialog(`Delete <b>${esc(deckLabel(d))}</b>? Past games keep their record.`, 'Delete', true))) return;
+          await cloud.deleteDeck(d.id); closeOverlay(ov); toast('Deck deleted'); renderTab();
+        }
+      } catch (x) { a.disabled = false; toast(x.message); }
+    });
+  }
+
   // ---------- event wiring ----------
   const ACTIONS = {
     tab: (el) => setTab(el.dataset.tab),
@@ -854,10 +1375,55 @@
     editCmd: (el) => openCmdEditor(el.dataset.id),
     cmdSort: (el) => { cmdSort = el.dataset.v; renderTab(); },
     deleteGame: async (el) => {
-      const g = data.games.find((x) => x.id === el.dataset.id); if (!g) return;
-      if (!(await confirmDialog(`Delete the game from ${fmtDate(g.endedAt)}? Stats will be recalculated.`, 'Delete', true))) return;
-      data.games = data.games.filter((x) => x !== g); save(true); renderTab(); toast('Game deleted');
+      const g = allGames().find((x) => x.id === el.dataset.id); if (!g) return;
+      if (!(await confirmDialog(`Delete the game from ${fmtDate(g.endedAt)}?${gm() ? ' It is removed for the whole group.' : ''} Stats will be recalculated.`, 'Delete', true))) return;
+      if (gm()) cloud.deleteGame(g.id); else { data.games = data.games.filter((x) => x !== g); save(true); }
+      renderTab(); toast('Game deleted');
     },
+    // online playgroups
+    pickSeatPlayer: (el) => openSeatPlayerPicker(+el.dataset.i),
+    pickSeatDeck: (el) => openSeatDeckPicker(+el.dataset.i),
+    authSignin: () => openAuth('signin'),
+    authSignup: () => openAuth('signup'),
+    goSettings: () => setTab('settings'),
+    editProfile: () => editProfile(),
+    statsScope: (el) => { statsScope = el.dataset.v; renderTab(); },
+    newDeck: () => openDeckEditor(null),
+    editDeck: (el) => openDeckEditor(el.dataset.id),
+    syncNow: async () => {
+      if (!cloud.online()) { toast('Offline — games will sync when you are back online'); return; }
+      toast('Syncing…'); const ok = await cloud.refresh(); renderTab();
+      toast(ok && !cloud.pending() ? 'All synced' : cloud.lastError() || `${cloud.pending()} still pending`);
+    },
+    signOut: async () => {
+      const n = cloud.pending();
+      const msg = n ? `<b>${n} game${n === 1 ? ' is' : 's are'} not uploaded yet</b> and will be lost if you sign out now. Sign out anyway?` : 'Sign out of your account on this phone? Local (offline) data stays.';
+      if (!(await confirmDialog(msg, 'Sign out', n > 0))) return;
+      await cloud.signOut(); statsScope = 'group'; renderTab(); toast('Signed out');
+    },
+    shareInvite: async () => {
+      const g = cloud.group(); const url = inviteLink(g.invite_code);
+      const text = `Join my playgroup “${g.name}” on Commander Tracker. Invite code: ${g.invite_code}`;
+      if (navigator.share) { try { await navigator.share({ title: 'Commander Tracker', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+      try { await navigator.clipboard.writeText(`${text}\n${url}`); toast('Invite link copied'); } catch (e) { toast(url); }
+    },
+    copyCode: async () => { const c = cloud.group().invite_code; try { await navigator.clipboard.writeText(c); toast('Code copied'); } catch (e) { toast(c); } },
+    createGroup: async () => {
+      if (!cloud.online()) { toast('Connect to the internet to create a group'); return; }
+      const name = await promptText('New playgroup', 'Group name', me().display_name + "'s group", { ok: 'Create' }); if (!name) return;
+      try { const g = await cloud.createGroup(name); toast(`Created ${g.name} — share the invite code`); renderTab(); maybeOfferMigration(); } catch (e) { toast(e.message); }
+    },
+    joinGroupPrompt: async () => {
+      if (!cloud.online()) { toast('Connect to the internet to join a group'); return; }
+      const code = await promptText('Join a playgroup', 'Invite code', pendingJoinCode() || '', { ok: 'Join', upper: true, max: 8 }); if (!code) return;
+      try { const g = await cloud.joinGroup(code.toUpperCase().replace(/[^A-Z0-9]/g, '')); localStorage.removeItem(JOIN_KEY); toast(`Joined ${g.name}`); renderTab(); maybeOfferMigration(); } catch (e) { toast(e.message); }
+    },
+    leaveGroup: async () => {
+      const g = cloud.group();
+      if (!(await confirmDialog(`Leave <b>${esc(g.name)}</b>? Games stay with the group; you can rejoin with the invite code.`, 'Leave', true))) return;
+      try { await cloud.leaveGroup(g.id); renderTab(); toast('Left the group'); } catch (e) { toast(e.message); }
+    },
+    migrate: () => openMigration(cloud.groupId()),
     defLife: (el) => { data.settings.startingLife = +el.dataset.v; getSetup().life = +el.dataset.v; save(); renderTab(); },
     defCount: (el) => { data.settings.playerCount = +el.dataset.v; getSetup().count = +el.dataset.v; save(); renderTab(); },
     exportData: () => exportData(),
@@ -883,10 +1449,11 @@
     randomFirst: (el) => { data.settings.randomFirst = el.checked; save(); },
     wakeLock: (el) => { data.settings.wakeLock = el.checked; save(); },
     importFile: (el) => { const f = el.files && el.files[0]; el.value = ''; if (f) importFile(f); },
+    groupSel: (el) => { cloud.setGroup(el.value); renderTab(); },
   };
   const onBind = (e) => {
     const el = e.target; const b = el.dataset && el.dataset.bind; if (!b || !BINDS[b]) return;
-    const wants = el.type === 'file' || el.type === 'checkbox' ? 'change' : 'input';
+    const wants = el.type === 'file' || el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input';
     if (e.type === wants) BINDS[b](el, e);
   };
   document.addEventListener('input', onBind);
@@ -962,8 +1529,11 @@
   }
 
   // ---------- boot ----------
+  captureJoinParam();
   renderTab();
   if (data.current) openGame();
+  if (cloud) cloud.init().then(() => { requestRender(); if (pendingJoinCode() && $('#game').hidden) handlePendingJoin(); });
+  else if (pendingJoinCode()) toast('Connect to the internet to join the playgroup');
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     // Fallback when the SW can't navigate this window itself: reload once, after any open dialog closes.
     navigator.serviceWorker.addEventListener('message', (e) => {

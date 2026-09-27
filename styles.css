@@ -332,3 +332,44 @@ body.in-game #toast.show { transform: translate(-50%, 44px); }
 .diag-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); }
 .diag-row span { color: var(--muted); }
 .diag-row b { text-align: right; font-variant-numeric: tabular-nums; word-break: break-word; min-width: 0; }
+
+/* ---------- online playgroups (v1.2) ---------- */
+input[type=password] { width: 100%; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg2); padding: 0 14px; outline: none; font-size: 16px; -webkit-appearance: none; appearance: none; }
+.select { font-size: 16px; width: 100%; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); padding: 0 12px; appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) 19px, calc(100% - 13px) 19px; background-size: 5px 5px; background-repeat: no-repeat; }
+.select.sm { height: 38px; width: auto; max-width: 55%; padding-right: 30px; background-position: calc(100% - 16px) 16px, calc(100% - 11px) 16px; }
+.p-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255, 255, 255, .08); vertical-align: middle; }
+.p-dot.lg { width: 22px; height: 22px; }
+.guest-tag { display: inline-block; font-size: 10.5px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; padding: 1px 6px; border-radius: 6px; background: rgba(243, 195, 90, .16); color: var(--gold); vertical-align: middle; flex: none; }
+.sync-pill { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 14px; font-size: 12.5px; font-weight: 700; background: rgba(243, 195, 90, .16); color: var(--gold); white-space: nowrap; margin-bottom: 4px; }
+.sync-pill.off { background: rgba(139, 147, 171, .16); color: var(--muted); }
+.pend-badge { color: var(--gold); font-weight: 650; }
+.promo { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-color: #2c3657; background: linear-gradient(180deg, #172036, #131a2b); }
+.note-card { background: rgba(94, 168, 255, .1); border: 1px solid rgba(94, 168, 255, .3); color: #c6d6f5; border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-bottom: 14px; }
+.auth-seg { margin-bottom: 16px; }
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; box-shadow: 0 0 0 1px var(--line); }
+.swatch.on { border-color: var(--text); }
+.form-error { color: var(--danger); font-size: 14px; min-height: 20px; margin: 4px 0 10px; }
+.form-error b { color: var(--text); }
+.acct-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.grow { flex: 1; min-width: 0; }
+.sync-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.err-text { color: var(--danger); }
+.group-name { font-size: 18px; font-weight: 750; margin-bottom: 10px; }
+.invite-code { font: 800 30px/1.1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .18em; color: var(--text); background: var(--card2); border: 1px dashed var(--accent); border-radius: 12px; padding: 12px; text-align: center; margin: 6px 0 12px; user-select: all; -webkit-user-select: all; }
+.member-list { display: grid; gap: 6px; margin: 4px 0 14px; }
+.member { display: flex; align-items: center; gap: 10px; }
+.member span:nth-child(2) { font-weight: 650; }
+.check-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; }
+.check-row input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.map-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.guest-new { display: flex; gap: 8px; margin-bottom: 10px; }
+.guest-new input { flex: 1; min-width: 0; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.gchip { height: 38px; padding: 0 14px; border-radius: 19px; background: var(--card2); border: 1px solid var(--line); font-weight: 600; }
+.gchip.on { border-color: var(--accent); background: #251f45; }
+.pick-row:disabled { opacity: .45; }
+.cmd-pick:disabled { opacity: .5; }
+.cmd-card:disabled { opacity: 1; cursor: default; color: inherit; }
+.scope-seg { margin-bottom: 14px; }
