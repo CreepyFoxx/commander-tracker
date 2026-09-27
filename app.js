@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.3.0';
+  const APP_VERSION = '1.3.1';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };

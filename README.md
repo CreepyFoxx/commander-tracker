@@ -7,7 +7,7 @@ Everything lives in `public/` (plain HTML/CSS/JS). There's no build step. Data i
 - `public/index.html`, `styles.css`, `app.js`: the app; `public/cloud.js`: online playgroups (Supabase data + offline sync)
 - `public/sw.js`: service worker (offline cache). Bump `CACHE` when you deploy changes.
 - `public/manifest.json`, `public/icons/`: PWA manifest + icons (180, 192, 512, maskable 512)
-- `tools/test.mjs`: Playwright end-to-end test (iPhone 390x844). `tools/make-icons.mjs` regenerates the icons.
+- `tools/test.mjs`: Playwright end-to-end test (iPhone 390x844). `tools/make-icons.mjs` regenerates the icons; `tools/shot-standalone.mjs` renders the game with emulated iPhone safe areas; `tools/fixture-v1.json` is v1.0-format data used to test backward compatibility.
 - `screenshots/`: screenshots from the test run
 - `commander-tracker.zip`: contents of `public/`, ready to upload to any static host
 
@@ -41,11 +41,19 @@ Optional. Without an account the app works exactly as before, 100% local.
 - Offline: finished games queue on the phone and upload automatically when the connection is back ("pending sync" pill).
 - Tests: `tools/test.mjs` (local mode), `tools/test-online.mjs` (online flows; needs seeded test accounts).
 
-## Login screen backgrounds (v1.3)
-- Phone: `public/img/login-phone.jpg`, about 1290x2796 px, portrait (used below 768 px width).
-- Tablet: `public/img/login-tablet.jpg`, about 2048x2732 px, portrait (used from 768 px width; in iPad landscape it is
-  cropped with `background-size: cover`, so keep the subject near the centre).
-- The current files are generated gradient placeholders (`tools/make-login-placeholders.mjs`). To swap: overwrite the two
-  JPGs (sRGB, quality ~75-80, ideally < 500 KB each), bump `CACHE` in `public/sw.js`, deploy.
-- Focal point for cropping: `--login-focus-phone` / `--login-focus-tablet` in `styles.css` (default `50% 35%`).
-- A dark gradient overlay (`.login-shade`) keeps the text and buttons readable on any photo.
+## Login screen backgrounds (v1.3, artwork since v1.3.1)
+- Phone: `public/img/login-phone.jpg` (used below 768 px width). Tablet: `public/img/login-tablet.jpg` (from 768 px).
+- v1.3.1: both files are the same 768x1152 (2:3) forest illustration (sRGB, q80, ~200 KB) with a round logo in the exact
+  centre. The layout is tuned around that logo (see the comment in `styles.css`):
+  - phone: brand at the top, buttons at the bottom, art zoomed from the top edge (`--login-zoom-phone`, 1.08) so the logo
+    sits in the gap; the zoom is dropped while the invite banner is shown so the logo moves up clear of it.
+  - tablet portrait: frosted card anchored at the bottom, art aligned to its bottom edge (`--login-focus-tablet: 50% 100%`)
+    so the logo stays above the card.
+  - tablet landscape (aspect >= 5:4): the whole picture as a full-height panel on the left (`.login-art`, width =
+    height x `--login-art-ratio`, i.e. the image's width/height), blurred copy behind, card on the right.
+- To swap: overwrite the JPGs (sRGB, quality ~75-80, < 500 KB each), bump `CACHE` in `public/sw.js`, deploy. If a new
+  image has a different aspect ratio, update `--login-art-ratio`; if its subject is not centred, revisit the focal vars.
+- Focal points: `--login-focus-phone` (`50% 50%`) / `--login-focus-tablet` (`50% 100%`) in `styles.css`.
+- `.login-shade` darkens the top (brand text) and bottom (buttons) and stays clear over the logo band in the middle.
+- `tools/shot-login.mjs [prefix]` renders the login at 402x812, 375x667, 820x1180 and 1180x820 (`INVITE=1` adds a
+  sample invite banner). `tools/make-login-placeholders.mjs` regenerates the old gradient placeholders.
