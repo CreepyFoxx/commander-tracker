@@ -1,5 +1,5 @@
 /* Commander Tracker service worker: offline app shell, stale-while-revalidate. */
-const CACHE = 'edh-tracker-v1.1.0';
+const CACHE = 'edh-tracker-v1.1.1';
 const ASSETS = [
   './', 'index.html', 'styles.css', 'app.js', 'manifest.json',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'

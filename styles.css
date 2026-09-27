@@ -12,7 +12,7 @@ body {
 }
 body.in-game { overflow: hidden; position: fixed; inset: 0; background: #05060a; }
 html:has(body.in-game) { background: #05060a; }
-/* notch devices: guard against iOS standalone under-reporting the bottom inset */
+/* notch devices where the web view reaches the home indicator: guard against an under-reported bottom inset */
 html.notch { --sab: max(env(safe-area-inset-bottom, 0px), 28px); }
 button, input, select { font: inherit; color: inherit; touch-action: manipulation; }
 button { cursor: pointer; border: 0; background: none; padding: 0; }
@@ -24,7 +24,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 /* ---------- app shell ---------- */
 #view { padding: calc(var(--sat) + 14px) calc(var(--sar) + 16px) calc(var(--sab) + 92px) calc(var(--sal) + 16px); max-width: 640px; margin: 0 auto; }
 #tabbar {
-  position: fixed; left: 0; right: 0; bottom: calc(-1 * var(--vh-gap, 0px)); z-index: 20; display: flex; justify-content: space-around;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: space-around;
   padding: 6px calc(var(--sar) + 4px) calc(var(--sab) + 6px) calc(var(--sal) + 4px);
   background: rgba(13, 15, 23, .86); backdrop-filter: blur(18px) saturate(1.6); -webkit-backdrop-filter: blur(18px) saturate(1.6); border-top: 1px solid var(--line);
 }
@@ -325,3 +325,10 @@ body.in-game #toast.show { transform: translate(-50%, 44px); }
 .stepper .cbtn { width: 56px; height: 52px; font-size: 26px; border-radius: 14px; }
 .stepper input { flex: 1; height: 52px; text-align: center; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .dur-field input { max-width: 160px; }
+
+/* diagnostics */
+.link-btn { color: var(--muted); font-size: 13px; text-decoration: underline; padding: 8px 12px; }
+.diag { font-size: 13px; margin-bottom: 12px; }
+.diag-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); }
+.diag-row span { color: var(--muted); }
+.diag-row b { text-align: right; font-variant-numeric: tabular-nums; word-break: break-word; min-width: 0; }

@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.1.1';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -542,6 +542,7 @@
         <button class="btn gold block big" data-ga="end">${I.trophy} End game & save</button>
         <div class="row2"><button class="btn ghost" data-ga="restart">Restart</button><button class="btn ghost" data-ga="exit">Exit to menu</button></div>
         <button class="btn ghost danger-text block" data-ga="abandon">Abandon game</button>
+        <p class="center"><button class="link-btn" data-act="displayInfo">Display info</button></p>
       </div>`);
     const draw = () => {
       if (!G()) return;
@@ -799,7 +800,8 @@
       </section>
       <section class="card"><div class="card-title">Danger zone</div><button class="btn danger-outline block" data-act="wipeData">Delete all data</button></section>
       ${installHint()}
-      <p class="muted small center foot-note">Tap the top / bottom half of a panel for ±1, hold for ±10. Use ⋯ for commander damage, poison, tax, monarch & initiative. The centre clock opens the game menu.</p>`;
+      <p class="muted small center foot-note">Tap the top / bottom half of a panel for ±1, hold for ±10. Use ⋯ for commander damage, poison, tax, monarch & initiative. The centre clock opens the game menu.</p>
+      <p class="center"><button class="link-btn" data-act="displayInfo">Display info</button></p>`;
   }
   function backupJson() {
     return JSON.stringify({ app: 'commander-tracker', version: 1, exportedAt: new Date().toISOString(), commanders: data.commanders, games: data.games, settings: data.settings, lastSetup: data.lastSetup, current: data.current }, null, 2);
@@ -866,6 +868,7 @@
     },
     playerSheet: (el) => { const panel = el.closest('.panel'); if (panel) openPlayerSheet(panel.dataset.pid); },
     gameMenu: () => openGameMenu(),
+    displayInfo: () => openDisplayInfo(),
   };
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]'); if (!el) return;
@@ -898,28 +901,65 @@
     new MutationObserver(fit).observe($('#game'), { childList: true }); window.addEventListener('resize', fit);
   }
 
-  // ---------- viewport (iOS standalone reports a too-short innerHeight/100dvh when drawn under the status bar) ----------
+  // ---------- viewport ----------
+  // iOS 26 Home Screen web apps (WebKit bug 301994): the web view is ~62px shorter than the screen and the system paints
+  // an opaque bar below it that no DOM element can reach. So never size layers beyond innerHeight; instead fit the painted
+  // area exactly and, when that gap exists, drop the home-indicator inset (the web view already ends above it).
   const probe = document.createElement('div');
-  probe.id = 'sa-probe'; probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;top:0;left:0;padding-top:env(safe-area-inset-top,0px)';
+  probe.id = 'sa-probe';
+  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;top:0;left:0;width:0;height:0;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
   document.documentElement.appendChild(probe);
+  const vp = {};
   function fitViewport() {
     const root = document.documentElement; const standalone = isStandalone();
-    let h = window.innerHeight;
-    const sat = parseFloat(getComputedStyle(probe).paddingTop) || 0;
-    if (standalone && isIOS && sat > 0) {
-      const portrait = window.innerHeight >= window.innerWidth;
-      const full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-      if (full > h && full - h <= 140) h = full; // webview extends under status bar & home indicator: use the whole screen
-    }
+    const cs = getComputedStyle(probe);
+    const sat = parseFloat(cs.paddingTop) || 0, sab = parseFloat(cs.paddingBottom) || 0;
+    const h = window.innerHeight;
+    const portrait = window.innerHeight >= window.innerWidth;
+    const screenH = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    // content drawn from the very top (sat > 0) but shorter than the screen => unpainted band at the bottom
+    const gapBelow = standalone && isIOS && sat > 0 ? Math.max(0, Math.round(screenH - h)) : 0;
     root.style.setProperty('--app-h', h + 'px');
-    root.style.setProperty('--vh-gap', Math.max(0, h - window.innerHeight) + 'px');
+    if (gapBelow > 0) root.style.setProperty('--sab', Math.max(4, sab - gapBelow) + 'px');
+    else root.style.removeProperty('--sab');
     root.classList.toggle('standalone', standalone);
-    root.classList.toggle('notch', sat > 0);
+    root.classList.toggle('notch', sat > 0 && gapBelow === 0);
+    root.classList.toggle('ios-gap', gapBelow > 0);
+    Object.assign(vp, { sat, sab, gapBelow, screenH, h });
   }
   fitViewport();
   window.addEventListener('resize', fitViewport);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fitViewport);
   window.addEventListener('orientationchange', () => setTimeout(fitViewport, 300));
   window.addEventListener('pageshow', fitViewport);
+
+  async function openDisplayInfo() {
+    fitViewport();
+    const cs = getComputedStyle(probe); const root = document.documentElement; const vv = window.visualViewport;
+    const rh = (el) => (el ? Math.round(el.getBoundingClientRect().height * 10) / 10 + 'px' : '—');
+    const gameEl = $('#game');
+    let swCache = '—'; try { swCache = (await caches.keys()).join(', ') || 'none'; } catch (e) { /* no caches */ }
+    const rows = [
+      ['App version', APP_VERSION], ['SW cache', swCache],
+      ['navigator.standalone', String(navigator.standalone)], ['display-mode: standalone', String(matchMedia('(display-mode: standalone)').matches)],
+      ['window.innerWidth × innerHeight', `${innerWidth} × ${innerHeight}`], ['documentElement.clientHeight', root.clientHeight],
+      ['visualViewport.height / offsetTop', vv ? `${Math.round(vv.height * 10) / 10} / ${vv.offsetTop}` : 'n/a'],
+      ['screen.width × height', `${screen.width} × ${screen.height}`], ['devicePixelRatio', devicePixelRatio],
+      ['safe-area-inset top / bottom', `${cs.paddingTop} / ${cs.paddingBottom}`], ['safe-area-inset left / right', `${cs.paddingLeft} / ${cs.paddingRight}`],
+      ['Detected unpainted band below', vp.gapBelow + 'px'], ['--app-h (game layer size)', getComputedStyle(root).getPropertyValue('--app-h').trim()],
+      ['Effective bottom inset (--sab)', getComputedStyle(root).getPropertyValue('--sab').trim()],
+      ['html height', rh(root)], ['body height', rh(document.body)], ['game layer height', gameEl.hidden ? 'hidden (open during a game)' : rh(gameEl)],
+      ['User agent', navigator.userAgent],
+    ];
+    const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n');
+    const ov = openSheet(`<div class="sheet-head"><h2>Display info</h2><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sheet-body"><p class="muted small">Screenshot this screen to report layout issues.</p>
+      <div class="diag">${rows.map(([k, v]) => `<div class="diag-row"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
+      <button class="btn block" data-role="copy">Copy as text</button></div>`, { cls: 'tall diag-sheet' });
+    ov.querySelector('[data-role=copy]').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(text); toast('Copied'); } catch (e) { toast('Clipboard not available'); }
+    });
+  }
 
   // ---------- boot ----------
   renderTab();
