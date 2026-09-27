@@ -383,21 +383,22 @@ input[type=password] { width: 100%; height: 46px; border-radius: 12px; border: 1
 .form-error.center { text-align: center; }
 .form-error:empty { min-height: 0; margin: 0; }
 
-/* ---------- login screen (v1.3, art v1.3.1) ----------
-   Backgrounds: public/img/login-phone.jpg (< 768px wide) and public/img/login-tablet.jpg (>= 768px). Since v1.3.1 both are
-   the same 768x1152 (2:3) illustration whose round logo sits in the exact centre; the layout keeps that logo visible:
-   - phone: brand at the top, buttons at the bottom, the art zoomed from the top edge (--login-zoom-phone) so the logo lands
-     in the gap between them; the shade is clear across that band.
-   - tablet portrait: frosted card anchored at the bottom, art aligned so the logo sits above the card.
-   - tablet landscape (>= 5:4): the whole picture as a full-height panel on the left (.login-art, width = height x
-     --login-art-ratio, i.e. the image's width/height), a blurred copy behind, card centred in the space on the right.
-   --login-focus-phone / --login-focus-tablet ("x% y%") pick what stays visible when cover-cropped. */
-:root { --login-focus-phone: 50% 50%; --login-focus-tablet: 50% 100%; --login-zoom-phone: 1.08; --login-art-ratio: .6667; }
+/* ---------- login screen (v1.3, art v1.3.2) ----------
+   Backgrounds: public/img/login-phone.jpg (< 768px wide) and public/img/login-tablet.jpg (>= 768px).
+   - phone art: the 2:3 illustration (AI-upscaled to 1290x1935) with its round logo in the exact centre. Brand at the top,
+     buttons at the bottom, the art zoomed from the top edge (--login-zoom-phone) so the logo lands in the gap between them;
+     the shade is clear across that band.
+   - tablet art: the same picture outpainted to a wide 2580x1791 canvas (--login-tablet-ratio = width/height) with the
+     original logo at --login-tablet-logo-x / -y (fractions of the image). The art always covers the screen and is placed
+     with calc() so the logo lands at a chosen screen point (--login-tablet-at-x): portrait = centred above the card that
+     is anchored at the bottom (art zoomed by --login-tablet-zoom and bottom-aligned so the logo moves up);
+     landscape (>= 5:4) = logo left of centre, card on the right. */
+:root { --login-focus-phone: 50% 50%; --login-zoom-phone: 1.08;
+  --login-tablet-ratio: 1.4405; --login-tablet-logo-x: .3298; --login-tablet-logo-y: .504; }
 body.login-open { overflow: hidden; }
 #login { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); z-index: 40; overflow: hidden; background: #0b0d14; color: #fff; }
 .login-bg { position: absolute; inset: 0; background: #0b0d14 url("img/login-phone.jpg") var(--login-focus-phone) / cover no-repeat;
   transform: scale(var(--login-zoom-phone)); transform-origin: 50% 0; }
-.login-art { display: none; }
 /* invite banner makes the bottom block taller: drop the zoom so the logo moves up and stays clear of it */
 #login:has(.login-invite:not([hidden])) .login-bg { transform: none; }
 .login-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6, 7, 12, .55) 0%, rgba(6, 7, 12, .4) 22%, rgba(6, 7, 12, .08) 37%,
@@ -420,8 +421,13 @@ body.login-open { overflow: hidden; }
 .spinner { width: 20px; height: 20px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .25); border-top-color: #fff; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (min-width: 768px) {
-  .login-bg { background-image: url("img/login-tablet.jpg"); background-position: var(--login-focus-tablet); transform: none; }
-  .login-shade { background: linear-gradient(180deg, rgba(6, 7, 12, .3) 0%, rgba(6, 7, 12, 0) 25%, rgba(6, 7, 12, 0) 55%, rgba(6, 7, 12, .45) 75%, rgba(6, 7, 12, .75) 100%); }
+  #login { --login-tablet-zoom: 1.15; --login-tablet-at-x: 50vw; --lt-h: var(--app-h, 100dvh);
+    --lt-w: max(100vw, calc(var(--lt-h) * var(--login-tablet-ratio) * var(--login-tablet-zoom)));
+    --lt-ah: calc(var(--lt-w) / var(--login-tablet-ratio));
+    --lt-x: clamp(calc(100vw - var(--lt-w)), calc(var(--login-tablet-at-x) - var(--lt-w) * var(--login-tablet-logo-x)), 0px);
+    --lt-y: calc(var(--lt-h) - var(--lt-ah)); }
+  .login-bg { background-image: url("img/login-tablet.jpg"); background-size: var(--lt-w) var(--lt-ah); background-position: var(--lt-x) var(--lt-y); transform: none; }
+  .login-shade { background: linear-gradient(180deg, rgba(6, 7, 12, .3) 0%, rgba(6, 7, 12, 0) 22%, rgba(6, 7, 12, 0) 58%, rgba(6, 7, 12, .4) 76%, rgba(6, 7, 12, .7) 100%); }
   .login-inner { align-items: flex-end; padding-bottom: calc(var(--sab) + 36px); }
   .login-card { min-height: 0; max-width: 460px; justify-content: center; gap: 24px; padding: 30px 36px 26px; border-radius: 28px;
     background: rgba(14, 16, 26, .6); border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .7);
@@ -432,13 +438,12 @@ body.login-open { overflow: hidden; }
   #login:has(.login-invite:not([hidden])) .login-brand h1 { margin-top: 0; }
 }
 @media (min-width: 768px) and (min-aspect-ratio: 5/4) {
-  #login { --login-art-w: calc(var(--app-h, 100dvh) * var(--login-art-ratio)); }
-  .login-bg { inset: -60px; background-position: 50% 50%; filter: blur(28px) brightness(.45) saturate(1.25); }
-  .login-art { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: var(--login-art-w);
-    background: url("img/login-tablet.jpg") 50% 50% / cover no-repeat;
-    -webkit-mask-image: linear-gradient(90deg, #000 78%, transparent); mask-image: linear-gradient(90deg, #000 78%, transparent); }
-  .login-shade { background: linear-gradient(90deg, rgba(6, 7, 12, 0) 0%, rgba(6, 7, 12, 0) 40%, rgba(6, 7, 12, .25) 100%); }
-  .login-inner { align-items: center; padding-left: calc(var(--login-art-w) + 22px); padding-bottom: calc(var(--sab) + 22px); }
+  /* landscape: no zoom (art height = screen height where possible), logo at ~32% across, vertically near the middle */
+  #login { --login-tablet-zoom: 1; --login-tablet-at-x: 32vw;
+    --lt-y: clamp(calc(var(--lt-h) - var(--lt-ah)), calc(var(--lt-h) * .48 - var(--lt-ah) * var(--login-tablet-logo-y)), 0px); }
+  .login-shade { background: linear-gradient(90deg, rgba(6, 7, 12, 0) 0%, rgba(6, 7, 12, 0) 44%, rgba(6, 7, 12, .32) 100%),
+    linear-gradient(180deg, rgba(6, 7, 12, .18) 0%, rgba(6, 7, 12, 0) 20%, rgba(6, 7, 12, 0) 80%, rgba(6, 7, 12, .25) 100%); }
+  .login-inner { align-items: center; justify-content: flex-end; padding-right: calc(var(--sar) + 6vw); padding-bottom: calc(var(--sab) + 22px); }
   .login-card { padding: 40px 38px 32px; gap: 28px; }
   .login-logo, #login:has(.login-invite:not([hidden])) .login-logo { display: inline-block; width: 80px; height: 80px; border-radius: 20px; }
   #login:has(.login-invite:not([hidden])) .login-brand h1 { margin-top: 12px; }

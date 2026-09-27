@@ -41,19 +41,22 @@ Optional. Without an account the app works exactly as before, 100% local.
 - Offline: finished games queue on the phone and upload automatically when the connection is back ("pending sync" pill).
 - Tests: `tools/test.mjs` (local mode), `tools/test-online.mjs` (online flows; needs seeded test accounts).
 
-## Login screen backgrounds (v1.3, artwork since v1.3.1)
+## Login screen backgrounds (v1.3, artwork since v1.3.1, upscaled/expanded in v1.3.2)
 - Phone: `public/img/login-phone.jpg` (used below 768 px width). Tablet: `public/img/login-tablet.jpg` (from 768 px).
-- v1.3.1: both files are the same 768x1152 (2:3) forest illustration (sRGB, q80, ~200 KB) with a round logo in the exact
-  centre. The layout is tuned around that logo (see the comment in `styles.css`):
+- Source: a 768x1152 (2:3) forest illustration with a round logo in the exact centre.
+  - phone file (v1.3.2): Real-ESRGAN x4 anime model (3072x4608), downscaled to 1290x1935, q80 4:4:4, ~465 KB.
+  - tablet file (v1.3.2): the picture outpainted to 1936x1344 (original units; extra forest mostly to the right, some left,
+    top and bottom) with Stable Diffusion 1.5 inpainting (DreamShaper 8), upscaled x4 with the same Real-ESRGAN model,
+    the upscaled original pasted back over its area (feathered 40 px), exported 2580x1791 q80, ~480 KB. The logo sits at
+    x .3298 / y .504 of the image (`--login-tablet-logo-x/-y`), aspect `--login-tablet-ratio` 1.4405.
+- Layout (see the comment in `styles.css`):
   - phone: brand at the top, buttons at the bottom, art zoomed from the top edge (`--login-zoom-phone`, 1.08) so the logo
     sits in the gap; the zoom is dropped while the invite banner is shown so the logo moves up clear of it.
-  - tablet portrait: frosted card anchored at the bottom, art aligned to its bottom edge (`--login-focus-tablet: 50% 100%`)
-    so the logo stays above the card.
-  - tablet landscape (aspect >= 5:4): the whole picture as a full-height panel on the left (`.login-art`, width =
-    height x `--login-art-ratio`, i.e. the image's width/height), blurred copy behind, card on the right.
-- To swap: overwrite the JPGs (sRGB, quality ~75-80, < 500 KB each), bump `CACHE` in `public/sw.js`, deploy. If a new
-  image has a different aspect ratio, update `--login-art-ratio`; if its subject is not centred, revisit the focal vars.
-- Focal points: `--login-focus-phone` (`50% 50%`) / `--login-focus-tablet` (`50% 100%`) in `styles.css`.
+  - tablet: the expanded art always covers the screen; size/position are computed with `calc()` so the logo lands at
+    `--login-tablet-at-x`. Portrait: logo centred, art zoomed (`--login-tablet-zoom` 1.15) and bottom-aligned so the logo
+    sits above the frosted card anchored at the bottom. Landscape (>= 5:4): logo at ~32% across, card on the right.
+- To swap: overwrite the JPGs (sRGB, quality ~75-80, < 500 KB each), bump `CACHE` in `public/sw.js`, deploy. A new
+  tablet image needs matching `--login-tablet-ratio` and `--login-tablet-logo-x/-y` (and the logo box in `tools/test.mjs`).
 - `.login-shade` darkens the top (brand text) and bottom (buttons) and stays clear over the logo band in the middle.
 - `tools/shot-login.mjs [prefix]` renders the login at 402x812, 375x667, 820x1180 and 1180x820 (`INVITE=1` adds a
-  sample invite banner). `tools/make-login-placeholders.mjs` regenerates the old gradient placeholders.
+  sample invite banner, `EXTRA=1` adds 768x1024, 1024x768, 1024x1366, 1366x1024, 1440x900). `tools/make-login-placeholders.mjs` regenerates the old gradient placeholders.
