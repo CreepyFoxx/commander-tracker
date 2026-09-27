@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.3.2';
+  const APP_VERSION = '1.4.0';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -21,7 +21,37 @@
     sword: '<svg viewBox="0 0 24 24" class="ico-sword"><path d="M14.5 3.5H20.5V9.5L9 21 3 15z" /><path d="M6 12l6 6M4 20l2-2"/></svg>',
     trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
     trophy: '<svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4.5a3.5 3.5 0 0 0 3.8 4M16 6h3.5a3.5 3.5 0 0 1-3.8 4M12 13v4M8 20h8M9.5 17h5"/></svg>',
+    target: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8" fill="currentColor"/></svg>',
+    d6: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="8.6" cy="8.6" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.4" cy="15.4" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.4" cy="8.6" r="1.2" fill="currentColor" stroke="none"/><circle cx="8.6" cy="15.4" r="1.2" fill="currentColor" stroke="none"/></svg>',
+    d20: '<svg viewBox="0 0 24 24"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 7.5 7.4 15h9.2zM12 2.8v4.7M4 7.4l3.4 7.6M20 7.4 16.6 15M7.4 15 12 21.2 16.6 15"/></svg>',
+    coin: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="8.5"/><path d="M12 7.5v9M14.6 9.3c-.6-.8-1.5-1.2-2.6-1.2-1.4 0-2.5.8-2.5 1.9 0 2.6 5.2 1.4 5.2 4 0 1.1-1.2 1.9-2.7 1.9-1.1 0-2.1-.5-2.7-1.3"/></svg>',
+    crown: '<svg viewBox="0 0 24 24"><path d="M3.5 8 7.8 12 12 5l4.2 7 4.3-4-1.8 10.5H5.3z"/><path d="M5.8 21h12.4"/></svg>',
+    castle: '<svg viewBox="0 0 24 24"><path d="M4 21V9h3v2h2.5V8.5h5V11H17V9h3v12zM10 21v-4a2 2 0 0 1 4 0v4M12 8.5V3l4 1.6-4 1.6"/></svg>',
+    poison: '<svg viewBox="0 0 24 24"><path d="M12 3.2s6 6.4 6 10.8a6 6 0 0 1-12 0c0-4.4 6-10.8 6-10.8z"/><path d="M9.5 14.5a2.7 2.7 0 0 0 2.5 2.4"/></svg>',
+    heart: '<svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-9.6-9.3C.9 7.8 3.2 4 6.9 4c2.1 0 3.6 1.1 5.1 3 1.5-1.9 3-3 5.1-3 3.7 0 6 3.8 4.5 7.2-2.1 4.7-9.6 9.3-9.6 9.3z"/></svg>',
+    cycle: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/></svg>',
+    play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10.2-6.5a1 1 0 0 0 0-1.8L9.5 4.6A1 1 0 0 0 8 5.5z"/></svg>',
+    clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+    users: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c.6-3.5 3.2-5.5 6.5-5.5s5.9 2 6.5 5.5M16 5.2a3.5 3.5 0 0 1 0 6.6M18.5 14.8c1.7.8 2.7 2.6 3 5.2"/></svg>',
+    turns: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.7M4 4v4.7h4.7"/><path d="M12 8v4.2l2.8 1.7"/></svg>',
+    hourglass: '<svg viewBox="0 0 24 24"><path d="M6.5 3h11M6.5 21h11M7.5 3c0 5 9 5.5 9 9s-9 4-9 9M16.5 3c0 5-9 5.5-9 9s9 4 9 9"/></svg>',
+    first: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4.5c4-2.5 7 2.5 13 0v9c-6 2.5-9-2.5-13 0"/></svg>',
+    percent: '<svg viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></svg>',
+    shield: '<svg viewBox="0 0 24 24"><path d="M12 2.5 4 5.5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10v-6z"/><path d="M9 11.5l2 2 4-4"/></svg>',
+    chart: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+    history: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    skull: '<svg viewBox="0 0 24 24"><path d="M12 3C7.6 3 4.5 6.1 4.5 10.2c0 2.4 1.1 4.2 2.8 5.3V19a1 1 0 0 0 1 1h7.4a1 1 0 0 0 1-1v-3.5c1.7-1.1 2.8-2.9 2.8-5.3C19.5 6.1 16.4 3 12 3z"/><circle cx="9.2" cy="11" r="1.6" fill="currentColor"/><circle cx="14.8" cy="11" r="1.6" fill="currentColor"/><path d="M10.5 20v-2.5M13.5 20v-2.5"/></svg>',
+    flame: '<svg viewBox="0 0 24 24"><path d="M12 21c-4 0-7-2.7-7-6.5 0-3.2 2.3-5.3 3.6-7.1.4 1.8 1.4 3 2.6 3.4C11 7.4 12.6 4.6 15.2 3c-.3 2.7.9 4.6 2.2 6.3 1.1 1.4 1.6 3 1.6 4.8C19 18.3 16 21 12 21z"/></svg>',
+    flag: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4.5c4-2.5 7 2.5 13 0v9c-6 2.5-9-2.5-13 0"/></svg>',
+    sword2: '<svg viewBox="0 0 24 24"><path d="M14.5 3.5H20.5V9.5L9 21 3 15z"/><path d="M6 12l6 6M4 20l2-2"/></svg>',
   };
+  // commander colour identity as a CSS gradient (deck accent strips, commander bars)
+  const MANA_HEX = { W: '#f6efd2', U: '#3f8fe6', B: '#a594ad', R: '#ee5a40', G: '#2fb266', C: '#b8bbc9' };
+  function manaGrad(colors, dir = '180deg') {
+    const cs = colors && colors.length ? colors : ['C'];
+    if (cs.length === 1) return `linear-gradient(${dir}, ${MANA_HEX[cs[0]]}, ${MANA_HEX[cs[0]]})`;
+    return `linear-gradient(${dir}, ${cs.map((c, i) => `${MANA_HEX[c]} ${Math.round((i / (cs.length - 1)) * 100)}%`).join(', ')})`;
+  }
 
   // ---------- store ----------
   function defaults() {
@@ -147,10 +177,13 @@
   let statsScope = 'group';
   function renderTab() {
     $$('#tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-    const v = $('#view');
+    const v = $('#view'); v.dataset.tab = tab;
     ({ play: renderPlay, commanders: renderCommanders, stats: renderStats, history: renderHistory, settings: renderSettings })[tab](v);
   }
-  function setTab(t) { tab = t; renderTab(); window.scrollTo(0, 0); }
+  function setTab(t) {
+    tab = t; renderTab(); window.scrollTo(0, 0);
+    const v = $('#view'); v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); // gentle view-in (disabled under reduced motion)
+  }
 
   // ---------- setup ----------
   function getSetup() {
@@ -192,7 +225,7 @@
       }).join('')}
       <datalist id="player-names">${knownPlayers().map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
     </section>
-    <button class="btn primary big block" data-act="startGame">Start game</button>
+    <button class="btn primary big block start-btn" data-act="startGame">${I.play}Start game</button>
     ${installHint()}`;
   }
 
@@ -320,7 +353,7 @@
           <button class="p-more" data-act="playerSheet" aria-label="Commander damage & counters">${I.more}</button>
           <div class="p-center"><button class="lbtn" data-d="-1" aria-label="Lose life">−</button><div class="p-life-box"><div class="p-delta"></div><div class="p-life"></div></div><button class="lbtn" data-d="1" aria-label="Gain life">+</button></div>
           <div class="p-foot"><div class="chips"></div></div>
-          <div class="p-dead"><div class="skull">☠</div><div class="p-dead-txt"></div></div>
+          <div class="p-dead"><div class="skull">${I.skull}</div><div class="p-dead-txt"></div></div>
         </div></div>`;
       }).join('')}
       <button id="center-btn" data-act="gameMenu" aria-label="Game menu"><span class="cb-clock"></span><span class="cb-menu">${I.more}</span></button>
@@ -387,10 +420,10 @@
       const [oid, idx] = k.split(':'); const o = P(oid); if (!o) continue;
       out.push(`<span class="chip cd seat-${o.seat} ${v >= 21 ? 'lethal' : v >= 15 ? 'warn' : ''}" data-act="playerSheet"><i></i>${I.sword}${v}${idx === '1' ? '<sup>P</sup>' : ''}</span>`);
     }
-    if (p.poison) out.push(`<span class="chip poison ${p.poison >= 7 ? 'warn' : ''}" data-act="playerSheet">☣ ${p.poison}</span>`);
-    if (p.tax[0] || p.tax[1]) out.push(`<span class="chip tax" data-act="playerSheet">Tax +${p.tax[0] * 2}${p.partnerName ? '/+' + p.tax[1] * 2 : ''}</span>`);
-    if (g.monarch === p.id) out.push('<span class="chip crown">👑 Monarch</span>');
-    if (g.initiative === p.id) out.push('<span class="chip init">🏰 Initiative</span>');
+    if (p.poison) out.push(`<span class="chip poison ${p.poison >= 7 ? 'warn' : ''}" data-act="playerSheet">${I.poison}${p.poison}</span>`);
+    if (p.tax[0] || p.tax[1]) out.push(`<span class="chip tax" data-act="playerSheet">${I.cycle}Tax +${p.tax[0] * 2}${p.partnerName ? '/+' + p.tax[1] * 2 : ''}</span>`);
+    if (g.monarch === p.id) out.push(`<span class="chip crown">${I.crown}Monarch</span>`);
+    if (g.initiative === p.id) out.push(`<span class="chip init">${I.castle}Initiative</span>`);
     return out.join('');
   }
   function updateCenter() {
@@ -523,14 +556,14 @@
       }).join('');
     }).join('');
     const taxRows = [p.commanderName || 'Commander'].concat(p.partnerName ? [p.partnerName] : []).map((nm, i) =>
-      counterRow(`<span class="cnt-ico">⟳</span><div class="cnt-label"><b>Casts: ${esc(nm)}</b><small>Tax +${p.tax[i] * 2}</small></div>`, p.tax[i], `data-pa="tax" data-i="${i}"`)).join('');
+      counterRow(`<span class="cnt-ico tax">${I.cycle}</span><div class="cnt-label"><b>Casts: ${esc(nm)}</b><small>Tax +${p.tax[i] * 2}</small></div>`, p.tax[i], `data-pa="tax" data-i="${i}"`)).join('');
     return `<div class="ps-grid">
       <section><div class="sec-title">Commander damage taken</div>${cmdRows}<p class="hint">Also reduces life. 21 from a single commander is lethal.</p></section>
       <section><div class="sec-title">Life & counters</div>
-        ${counterRow('<span class="cnt-ico">♥</span><div class="cnt-label"><b>Life</b><small>adjust by 1</small></div>', p.life, 'data-pa="life"')}
-        ${counterRow('<span class="cnt-ico">☣</span><div class="cnt-label"><b>Poison</b><small>10 = loss</small></div>', p.poison, 'data-pa="poison"', p.poison >= 10 ? 'lethal' : p.poison >= 7 ? 'warn' : '', 10)}
+        ${counterRow(`<span class="cnt-ico life">${I.heart}</span><div class="cnt-label"><b>Life</b><small>adjust by 1</small></div>`, p.life, 'data-pa="life"')}
+        ${counterRow(`<span class="cnt-ico poison">${I.poison}</span><div class="cnt-label"><b>Poison</b><small>10 = loss</small></div>`, p.poison, 'data-pa="poison"', p.poison >= 10 ? 'lethal' : p.poison >= 7 ? 'warn' : '', 10)}
         ${taxRows}
-        <div class="toggle-row"><button class="tbtn ${g.monarch === p.id ? 'on' : ''}" data-pa="monarch">👑 Monarch</button><button class="tbtn ${g.initiative === p.id ? 'on' : ''}" data-pa="initiative">🏰 Initiative</button></div>
+        <div class="toggle-row"><button class="tbtn ${g.monarch === p.id ? 'on' : ''}" data-pa="monarch">${I.crown}Monarch</button><button class="tbtn ${g.initiative === p.id ? 'on' : ''}" data-pa="initiative">${I.castle}Initiative</button></div>
         ${p.eliminated ? `<div class="out-note">☠ Out ${ordinal(p.elimOrder)} · ${REASON[p.elimReason]}</div>` : ''}
         <button class="btn block ${p.eliminated ? '' : 'danger-outline'}" data-pa="concede">${p.eliminated ? 'Revive player' : 'Concede / eliminate'}</button>
       </section></div>`;
@@ -541,10 +574,10 @@
     const ov = openSheet(`<div class="sheet-head"><div><h2>Game menu</h2><div class="muted small" data-role="sub"></div></div><button class="icon-btn" data-close>${I.close}</button></div>
       <div class="sheet-body">
         <div class="menu-grid">
-          <button class="mtile" data-ga="first"><b>🎯</b><span>Random first player</span></button>
-          <button class="mtile" data-ga="d6"><b>🎲</b><span>Roll d6</span></button>
-          <button class="mtile" data-ga="d20"><b>⬢</b><span>Roll d20</span></button>
-          <button class="mtile" data-ga="coin"><b>🪙</b><span>Flip coin</span></button>
+          <button class="mtile t-violet" data-ga="first"><b>${I.target}</b><span>Random first player</span></button>
+          <button class="mtile t-cyan" data-ga="d6"><b>${I.d6}</b><span>Roll d6</span></button>
+          <button class="mtile t-orange" data-ga="d20"><b>${I.d20}</b><span>Roll d20</span></button>
+          <button class="mtile t-gold" data-ga="coin"><b>${I.coin}</b><span>Flip coin</span></button>
         </div>
         <button class="btn gold block big" data-ga="end">${I.trophy} End game & save</button>
         <div class="row2"><button class="btn ghost" data-ga="restart">Restart</button><button class="btn ghost" data-ga="exit">Exit to menu</button></div>
@@ -652,7 +685,7 @@
   }
   function showResult(rec) {
     const w = rec.winnerIndex != null ? rec.players[rec.winnerIndex] : null;
-    const ov = openSheet(`<div class="dialog-body center"><div class="trophy-big">🏆</div>
+    const ov = openSheet(`<div class="dialog-body center"><div class="trophy-big">${I.trophy}</div>
       <h2>${w ? esc(w.name) + ' wins!' : 'Draw'}</h2>${w && w.commanderName ? `<div class="muted"><span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}${w.partnerName ? ' + ' + esc(w.partnerName) : ''}</div>` : ''}
       <div class="muted small">${fmtDur(rec.durationMs)}${rec.turns ? ` · ${rec.turns} turns` : ''} · ${rec.pendingSync ? 'saved — will sync when online' : 'saved to history'}</div>
       <div class="dialog-actions"><button class="btn primary" data-r="rematch">Rematch</button><button class="btn" data-r="stats">View stats</button><button class="btn ghost" data-close>Done</button></div></div>`, { dialog: true });
@@ -679,6 +712,11 @@
     }
     return m;
   }
+  // circular win-rate ring for commander/deck cards (text stays "NN%" / "—")
+  function wrRing(s) {
+    const p = s.games ? Math.round((s.wins / s.games) * 100) : 0;
+    return `<div class="cc-wr ${s.games ? '' : 'none'}" style="--p:${p}"><b>${pct(s.wins, s.games)}</b><small>win rate</small></div>`;
+  }
   function renderCommanders(v) {
     if (gm()) { renderDecks(v); return; }
     const stats = commanderStats();
@@ -694,12 +732,11 @@
     list.sort(sorters[cmdSort]);
     v.innerHTML = `<header class="page-head"><div><div class="eyebrow">${data.commanders.length} deck${data.commanders.length === 1 ? '' : 's'}</div><h1>Commanders</h1></div><button class="btn primary sm" data-act="newCmd">+ Add</button></header>
       ${list.length ? `<div class="seg small-seg">${[['games', 'Most played'], ['winrate', 'Win rate'], ['recent', 'Recent'], ['name', 'A–Z']].map(([k, l]) => `<button data-act="cmdSort" data-v="${k}" class="${cmdSort === k ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''}
-      ${list.length ? list.map(({ c, s }) => `<button class="cmd-card" data-act="editCmd" data-id="${c.id}">
+      ${list.length ? list.map(({ c, s }) => `<button class="cmd-card" data-act="editCmd" data-id="${c.id}" style="--deck:${manaGrad(c.colors)}">
           <div class="cc-top"><span class="pips lg">${pips(c.colors)}</span><div class="cc-name"><b>${esc(c.name)}</b>${c.partner ? `<small>+ ${esc(c.partner)}</small>` : ''}${c.owner ? `<small class="owner">${esc(c.owner)}</small>` : ''}</div>
-          <div class="cc-wr"><b>${pct(s.wins, s.games)}</b><small>win rate</small></div></div>
-          <div class="bar"><i style="width:${s.games ? Math.round((s.wins / s.games) * 100) : 0}%"></i></div>
+          ${wrRing(s)}</div>
           <div class="cc-stats"><span><b>${s.games}</b> game${s.games === 1 ? '' : 's'}</span><span><b>${s.wins}</b> win${s.wins === 1 ? '' : 's'}</span><span><b>${s.games ? fmtDur(s.dur / s.games) : '—'}</b> avg</span>${s.kills ? `<span><b>${s.kills}</b> cmdr kills</span>` : ''}<span>${s.last ? 'Last ' + fmtShort(s.last) : 'Never played'}</span></div>
-        </button>`).join('') : `<div class="empty"><div class="empty-ico">🛡️</div><p>No commanders yet.</p><p class="muted small">Add your decks here, or create them when setting up a game.</p><button class="btn primary" data-act="newCmd">Add your first commander</button></div>`}`;
+        </button>`).join('') : `<div class="empty"><div class="empty-ico">${I.shield}</div><p>No commanders yet.</p><p class="muted small">Add your decks here, or create them when setting up a game.</p><button class="btn primary" data-act="newCmd">Add your first commander</button></div>`}`;
   }
   function statsHead() {
     if (!gm()) return `<header class="page-head"><div><div class="eyebrow">Overview</div><h1>Stats</h1></div></header>`;
@@ -711,7 +748,7 @@
     const games = meMode ? allGames().filter((g) => g.players.some((p) => p.userId === myId)) : allGames();
     const countP = (p) => !meMode || p.userId === myId;
     if (!games.length) {
-      v.innerHTML = `${statsHead()}<div class="empty"><div class="empty-ico">📊</div><p>No games recorded yet.</p><p class="muted small">Finish a game with “End game & save” to see stats here.</p></div>`;
+      v.innerHTML = `${statsHead()}<div class="empty"><div class="empty-ico">${I.chart}</div><p>No games recorded yet.</p><p class="muted small">Finish a game with “End game & save” to see stats here.</p></div>`;
       return;
     }
     const n = games.length;
@@ -753,19 +790,23 @@
     const longest = games.reduce((a, g) => (g.durationMs > a.durationMs ? g : a), games[0]);
     const shortest = games.reduce((a, g) => (g.durationMs < a.durationMs ? g : a), games[0]);
     const fastest = games.filter((g) => g.winnerIndex != null && g.turns > 0).reduce((a, g) => (!a || g.turns < a.turns ? g : a), null);
-    const bar = (label, pre, s) => `<div class="bar-row">${pre}<span class="bar-label">${label}</span><div class="bar"><i style="width:${s.g ? Math.round((s.w / s.g) * 100) : 0}%"></i></div><span class="bar-val">${pct(s.w, s.g)}<small>${s.w}/${s.g}</small></span></div>`;
     const avgP = totalPlayers / n;
+    const base = Math.min(100, Math.round(100 / avgP));
+    // win-rate bar; the thin marker shows the "fair share" baseline (1 / avg players)
+    const bar = (label, pre, s, cls = '', fill = '') => `<div class="bar-row"><span class="bar-label">${pre}<span class="ellipsis">${label}</span></span><div class="bar ${cls}" style="--base:${base}%${fill ? ';--fill:' + fill : ''}"><i style="width:${s.g ? Math.round((s.w / s.g) * 100) : 0}%"></i></div><span class="bar-val">${pct(s.w, s.g)}<small>${s.w}/${s.g}</small></span></div>`;
+    const baseNote = `<div class="bar-note">fair share ≈ ${base}% (1 in ${avgP.toFixed(1)} players)</div>`;
     const reasonTotal = Object.values(reasons).reduce((a, b) => a + b, 0);
     const players = [...byPlayer.values()].sort((a, b) => b.g - a.g || b.w - a.w);
+    const topPlayer = players.length > 1 ? players.filter((p) => p.w > 0).sort((a, b) => b.w / b.g - a.w / a.g || b.g - a.g)[0] : null;
     const winnerOf = (g) => g.players[g.winnerIndex];
     v.innerHTML = `${statsHead()}
       <div class="tiles">
-        <div class="tile"><b>${n}</b><span>games played</span></div>
-        <div class="tile"><b>${fmtDur(totalDur / n)}</b><span>avg duration</span></div>
-        <div class="tile"><b>${turnGames.length ? (totalTurns / turnGames.length).toFixed(1) : '—'}</b><span>avg turns</span></div>
-        <div class="tile"><b>${fmtDur(totalDur)}</b><span>total time played</span></div>
-        <div class="tile"><b>${avgP.toFixed(1)}</b><span>avg players</span></div>
-        ${meMode ? `<div class="tile"><b>${pct(myWins, myGames)}</b><span>your win rate (${myWins}/${myGames})</span></div>` : `<div class="tile"><b>${firstGames ? pct(firstWins, firstGames) : '—'}</b><span>first-player win rate</span></div>`}
+        <div class="tile t-violet"><i class="t-ico">${I.chart}</i><b>${n}</b><span>games played</span></div>
+        <div class="tile t-cyan"><i class="t-ico">${I.clock}</i><b>${fmtDur(totalDur / n)}</b><span>avg duration</span></div>
+        <div class="tile t-orange"><i class="t-ico">${I.turns}</i><b>${turnGames.length ? (totalTurns / turnGames.length).toFixed(1) : '—'}</b><span>avg turns</span></div>
+        <div class="tile t-teal"><i class="t-ico">${I.hourglass}</i><b>${fmtDur(totalDur)}</b><span>total time played</span></div>
+        <div class="tile t-rose"><i class="t-ico">${I.users}</i><b>${avgP.toFixed(1)}</b><span>avg players</span></div>
+        ${meMode ? `<div class="tile t-gold"><i class="t-ico">${I.trophy}</i><b>${pct(myWins, myGames)}</b><span>your win rate (${myWins}/${myGames})</span></div>` : `<div class="tile t-gold"><i class="t-ico">${I.first}</i><b>${firstGames ? pct(firstWins, firstGames) : '—'}</b><span>first-player win rate</span></div>`}
       </div>
       <section class="card"><div class="card-title">Highlights</div>
         ${most ? `<div class="hl-row"><span class="muted">Most played</span><span class="hl-v"><span class="pips">${pips(most.colors)}</span> ${esc(most.label)} <small>${most.g} game${most.g === 1 ? '' : 's'}</small></span></div>` : ''}
@@ -776,16 +817,17 @@
       </section>
       <section class="card"><div class="card-title">Players${meMode ? ' <span class="muted small">in games with you</span>' : ''}</div>
         <div class="ptable"><div class="pt-head"><span>Player</span><span>G</span><span>W</span><span>Win%</span><span>Avg pl.</span></div>
-        ${players.map((p) => { const fav = [...p.cmds.entries()].sort((a, b) => b[1] - a[1])[0]; return `<div class="pt-row"><span class="pt-name"><b>${esc(p.name)}${p.guest ? ' <span class="guest-tag">Guest</span>' : ''}</b>${fav ? `<small>${esc(fav[0])}</small>` : ''}</span><span>${p.g}</span><span>${p.w}</span><span class="acc">${pct(p.w, p.g)}</span><span>${(p.placeSum / p.g).toFixed(1)}</span></div>`; }).join('')}</div>
+        ${players.map((p) => { const fav = [...p.cmds.entries()].sort((a, b) => b[1] - a[1])[0]; return `<div class="pt-row ${p === topPlayer ? 'top' : ''}"><span class="pt-name"><b>${esc(p.name)}${p.guest ? ' <span class="guest-tag">Guest</span>' : ''}</b>${fav ? `<small>${esc(fav[0])}</small>` : ''}<span class="pt-bar"><i style="width:${Math.round((p.w / p.g) * 100)}%"></i></span></span><span>${p.g}</span><span>${p.w}</span><span class="acc">${pct(p.w, p.g)}</span><span>${(p.placeSum / p.g).toFixed(1)}</span></div>`; }).join('')}</div>
       </section>
       <section class="card"><div class="card-title">Win rate by color <span class="muted small">baseline ≈ ${Math.round(100 / avgP)}%</span></div>
-        ${WUBRG.concat('C').map((c) => bar(COLOR_NAME[c], `<span class="pip pip-${c}"></span>`, colorStats[c])).join('')}
+        ${WUBRG.concat('C').map((c) => bar(COLOR_NAME[c], `<span class="pip pip-${c}"></span>`, colorStats[c], `mana pip-${c}`)).join('')}
+        ${baseNote}
       </section>
       <section class="card"><div class="card-title">Win rate by number of colors</div>
-        ${['Colorless', 'Mono', 'Two-color', 'Three-color', 'Four-color', 'Five-color'].map((l, i) => (countStats[i].g ? bar(l, '', countStats[i]) : '')).join('')}
+        ${['Colorless', 'Mono', 'Two-color', 'Three-color', 'Four-color', 'Five-color'].map((l, i) => (countStats[i].g ? bar(l, `<span class="cnt-pips">${i ? '<i></i>'.repeat(i) : '<i class="o"></i>'}</span>`, countStats[i]) : '')).join('')}
       </section>
       <section class="card"><div class="card-title">${meMode ? 'My decks' : 'Commanders'}</div>
-        ${cmds.sort((a, b) => b.g - a.g || b.w - a.w).map((c) => bar(esc(c.label), `<span class="pips">${pips(c.colors)}</span>`, c)).join('')}
+        ${cmds.sort((a, b) => b.g - a.g || b.w - a.w).map((c) => bar(esc(c.label), `<span class="pips">${pips(c.colors)}</span>`, c, 'deck', manaGrad(c.colors, '90deg'))).join('')}
       </section>
       ${reasonTotal ? `<section class="card"><div class="card-title">How players were eliminated</div>
         ${Object.entries(reasons).filter(([, c]) => c).map(([r, c]) => `<div class="bar-row"><span class="bar-label">${REASON[r][0].toUpperCase() + REASON[r].slice(1)}</span><div class="bar alt"><i style="width:${Math.round((c / reasonTotal) * 100)}%"></i></div><span class="bar-val">${c}</span></div>`).join('')}
@@ -798,12 +840,12 @@
       ${games.length ? games.map((g) => {
         const ps = g.players.slice().sort((a, b) => (a.place || 99) - (b.place || 99));
         const w = g.winnerIndex != null ? g.players[g.winnerIndex] : null;
-        return `<div class="card game-card"><div class="gc-head"><div><b>${fmtDate(g.endedAt)}</b> <span class="muted small">${fmtTime(g.startedAt)}</span><div class="muted small">${g.playerCount} players · ${fmtDur(g.durationMs)}${g.turns ? ` · ${g.turns} turns` : ''} · ${g.startingLife} life</div>
+        return `<div class="card game-card"><div class="gc-head"><div><b class="gc-date">${fmtDate(g.endedAt)}</b> <span class="muted small">${fmtTime(g.startedAt)}</span><div class="gc-meta"><span>${I.users}${g.playerCount} players</span><span>${I.clock}${fmtDur(g.durationMs)}</span>${g.turns ? `<span>${I.turns}${g.turns} turns</span>` : ''}<span>${I.heart}${g.startingLife} life</span></div>
           ${gm() ? `<div class="muted small">${cloud.isPending(g.id) ? '<span class="pend-badge">⟳ waiting to sync</span> ' : ''}${recName(g) ? 'recorded by ' + esc(recName(g)) : ''}</div>` : ''}</div>
           ${!gm() || g.recordedBy === myId ? `<button class="icon-btn danger" data-act="deleteGame" data-id="${g.id}" aria-label="Delete game">${I.trash}</button>` : ''}</div>
-          <div class="gc-winner">${w ? `🏆 <b>${esc(pName(w))}</b> ${w.commanderName ? `<span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}` : ''}` : '<b>Draw</b>'}</div>
-          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis"><b>${esc(pName(p))}</b>${gm() && !p.userId ? ' <span class="guest-tag">Guest</span>' : ''} ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="muted small nowrap">${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${p.wentFirst ? ' · went 1st' : ''}</span></div>`).join('')}</div></div>`;
-      }).join('') : '<div class="empty"><div class="empty-ico">🕰️</div><p>No games yet.</p><p class="muted small">Saved games appear here. You can delete a wrong entry anytime.</p></div>'}`;
+          <div class="gc-winner ${w ? '' : 'draw'}">${w ? `${I.trophy}<b>${esc(pName(w))}</b>${w.commanderName ? `<span class="ellipsis muted"><span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}</span>` : ''}` : `${I.flag}<b>Draw</b>`}</div>
+          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis">${p.seat != null ? `<span class="seat-dot sm seat-${p.seat % 6}"></span>` : ''}<b>${esc(pName(p))}</b>${gm() && !p.userId ? ' <span class="guest-tag">Guest</span>' : ''} ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="muted small nowrap">${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${p.wentFirst ? ' · went 1st' : ''}</span></div>`).join('')}</div></div>`;
+      }).join('') : `<div class="empty"><div class="empty-ico">${I.history}</div><p>No games yet.</p><p class="muted small">Saved games appear here. You can delete a wrong entry anytime.</p></div>`}`;
   }
 
   // ---------- settings / backup ----------
@@ -823,7 +865,7 @@
         <div class="row2"><button class="btn primary" data-act="exportData">Export JSON</button><label class="btn">Import JSON<input type="file" accept="application/json,.json" data-bind="importFile" hidden></label></div>
         <button class="btn ghost block" data-act="copyData">Copy backup to clipboard</button>
       </section>
-      <section class="card"><div class="card-title">Danger zone</div><button class="btn danger-outline block" data-act="wipeData">Delete all data</button></section>
+      <section class="card danger-card"><div class="card-title">Danger zone</div><button class="btn danger-outline block" data-act="wipeData">Delete all data</button></section>
       ${installHint()}
       <p class="muted small center foot-note">Tap the top / bottom half of a panel for ±1, hold for ±10. Use ⋯ for commander damage, poison, tax, monarch & initiative. The centre clock opens the game menu.</p>
       <p class="center"><button class="link-btn" data-act="displayInfo">Display info</button></p>`;
@@ -1264,7 +1306,7 @@
           </div></div>`;
       }).join('')}
     </section>
-    <button class="btn primary big block" data-act="startGame">Start game</button>`;
+    <button class="btn primary big block start-btn" data-act="startGame">${I.play}Start game</button>`;
   }
   function openSeatPlayerPicker(i) {
     const seats = groupSeats(); const u = me();
@@ -1384,10 +1426,9 @@
   // ----- decks (group mode Commanders tab) -----
   function renderDecks(v) {
     const u = me(); const stats = commanderStats(); const empty = { games: 0, wins: 0, dur: 0, last: 0, kills: 0 };
-    const card = (d, editable) => { const s = stats.get(d.id) || empty; return `<button class="cmd-card" ${editable ? `data-act="editDeck" data-id="${d.id}"` : 'disabled'}>
+    const card = (d, editable) => { const s = stats.get(d.id) || empty; return `<button class="cmd-card" ${editable ? `data-act="editDeck" data-id="${d.id}"` : 'disabled'} style="--deck:${manaGrad(d.colors)}">
       <div class="cc-top"><span class="pips lg">${pips(d.colors)}</span><div class="cc-name"><b>${esc(d.commander)}</b>${d.partner ? `<small>+ ${esc(d.partner)}</small>` : ''}${d.name ? `<small class="owner">${esc(d.name)}</small>` : ''}</div>
-      <div class="cc-wr"><b>${pct(s.wins, s.games)}</b><small>win rate</small></div></div>
-      <div class="bar"><i style="width:${s.games ? Math.round((s.wins / s.games) * 100) : 0}%"></i></div>
+      ${wrRing(s)}</div>
       <div class="cc-stats"><span><b>${s.games}</b> game${s.games === 1 ? '' : 's'}</span><span><b>${s.wins}</b> win${s.wins === 1 ? '' : 's'}</span><span><b>${s.games ? fmtDur(s.dur / s.games) : '—'}</b> avg</span>${s.kills ? `<span><b>${s.kills}</b> cmdr kills</span>` : ''}<span>${s.last ? 'Last ' + fmtShort(s.last) : 'Never played'}</span></div></button>`; };
     const decks = cd().decks; const myDecks = decks.filter((d) => d.owner_id === u.id);
     const others = cd().members.filter((m) => m.id !== u.id);

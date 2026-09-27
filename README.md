@@ -60,3 +60,15 @@ Optional. Without an account the app works exactly as before, 100% local.
 - `.login-shade` darkens the top (brand text) and bottom (buttons) and stays clear over the logo band in the middle.
 - `tools/shot-login.mjs [prefix]` renders the login at 402x812, 375x667, 820x1180 and 1180x820 (`INVITE=1` adds a
   sample invite banner, `EXTRA=1` adds 768x1024, 1024x768, 1024x1366, 1366x1024, 1440x900). `tools/make-login-placeholders.mjs` regenerates the old gradient placeholders.
+
+## Visual design (v1.4)
+- One set of design tokens at the top of `public/styles.css` (colours, radii `--r-xs…--r-xl`, shadows, `--font` = SF / system,
+  `--font-num` = SF Rounded for numbers, easing/durations). Dark theme with purple-tinted surfaces and violet / cyan / orange
+  glow accents to match the login artwork; seat colours keep their own `--accent-s` / `--glow-s`.
+- Icons are inline SVG in the `I` object in `app.js` (no emoji for UI chrome, no external assets). Stats use win-rate bars
+  with a "fair share" baseline marker (1 / average players), mana-coloured bars, win-rate rings on commander cards and
+  deck colour strips. View changes use a short fade/slide that is disabled under `prefers-reduced-motion`.
+- On iPad (>= 1000px wide) Stats, History and Commanders use two columns.
+- `tools/shot-ui.mjs <prefix>` seeds demo data and screenshots every main screen at 402x812 (standalone), 375x667,
+  820x1180 and 1180x820 (`ONLY=phone,ipad` to limit). The v1.4 before/after set is `screenshots/33-before-*` / `33-after-*`.
+
