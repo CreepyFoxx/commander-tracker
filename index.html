@@ -29,6 +29,28 @@
   </nav>
 </div>
 <div id="game" hidden></div>
+<!-- Login screen. Backgrounds: img/login-phone.jpg (phones) and img/login-tablet.jpg (>= 768px wide), see styles.css -->
+<div id="login" hidden>
+  <div class="login-bg"></div>
+  <div class="login-shade"></div>
+  <div class="login-inner"><div class="login-card">
+    <div class="login-brand">
+      <img class="login-logo" src="icons/icon-192.png" alt="" width="96" height="96">
+      <h1>Commander Tracker</h1>
+      <p class="login-tag">Life, commander damage and stats for your playgroup.</p>
+    </div>
+    <div class="login-bottom">
+      <div class="login-invite" hidden></div>
+      <div class="login-actions">
+        <button class="btn google-btn big block" data-login="google"></button>
+        <div class="form-error center" data-role="lerr"></div>
+        <button class="link-btn login-other" data-login="other">Other options</button>
+        <button class="btn login-local block" data-login="local">Play without an account</button>
+      </div>
+      <div class="login-busy" hidden><span class="spinner"></span> Signing you in…</div>
+    </div>
+  </div></div>
+</div>
 <div id="overlay-root"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous" defer></script>

@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.2.1';
+  const APP_VERSION = '1.3.0';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -161,7 +161,7 @@
   }
   function installHint() {
     if (isStandalone()) return '';
-    return `<div class="card hint-card"><b>Install on your iPhone</b><p>Open this page in Safari, tap <b>Share</b> <span class="share-ico">⬆︎</span> then <b>Add to Home Screen</b>. It runs full-screen and offline. Your data lives only on this device — use Settings → Export to back it up.</p></div>`;
+    return `<div class="card hint-card"><b>Install on your iPhone or iPad</b><p>Open this page in Safari, tap <b>Share</b> <span class="share-ico">⬆︎</span> then <b>Add to Home Screen</b>. It runs full-screen and offline. Your data lives only on this device — use Settings → Export to back it up.</p></div>`;
   }
   function renderPlay(v) {
     if (gm()) { renderGroupPlay(v); return; }
@@ -995,13 +995,54 @@
     maybeOfferMigration();
   }
 
+
+  // ----- login screen -----
+  const LOCAL_KEY = 'edh-tracker:localOnly'; // user chose "Play without an account": don't show the login on launch
+  let freshInvite = false; // opened via ?join= in this launch (shows the login even after a local-only choice)
+  const loginEl = $('#login');
+  const loginVisible = () => !loginEl.hidden;
+  function shouldShowLogin() { return !me() && !data.current && (!localStorage.getItem(LOCAL_KEY) || freshInvite); }
+  function showLogin(opts = {}) {
+    loginEl.querySelector('[data-login=google]').innerHTML = `${G_LOGO}<span>Continue with Google</span>`;
+    loginEl.querySelector('.login-actions').hidden = !!opts.busy;
+    loginEl.querySelector('.login-busy').hidden = !opts.busy;
+    loginEl.querySelector('[data-role=lerr]').textContent = opts.error || '';
+    const inv = loginEl.querySelector('.login-invite'); const code = pendingJoinCode();
+    inv.hidden = !code;
+    if (code) {
+      inv.innerHTML = `You've been invited to <b data-role="gname">a playgroup</b><small>Sign in to join · code ${esc(code)}</small>`;
+      if (cloud) cloud.invitePreview(code).then((name) => { const b = inv.querySelector('[data-role=gname]'); if (name && b) b.textContent = name; });
+    }
+    loginEl.hidden = false; document.body.classList.add('login-open');
+  }
+  function hideLogin() { if (loginEl.hidden) return; loginEl.hidden = true; document.body.classList.remove('login-open'); }
+  loginEl.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-login]'); if (!b) return;
+    const err = loginEl.querySelector('[data-role=lerr]'); err.textContent = '';
+    if (b.dataset.login === 'google') {
+      if (!cloud) { err.textContent = 'You are offline — connect to sign in, or play without an account.'; return; }
+      startGoogle(err);
+    } else if (b.dataset.login === 'other') openAuth('signin');
+    else if (b.dataset.login === 'local') {
+      localStorage.setItem(LOCAL_KEY, '1'); freshInvite = false; hideLogin();
+      if (pendingJoinCode()) toast(`Invite saved — join anytime in Settings (code ${pendingJoinCode()})`);
+    }
+  });
+  let hadUser = !!me();
+  if (cloud) cloud.on(() => {
+    const u = !!me();
+    if (u) { localStorage.removeItem(LOCAL_KEY); hideLogin(); }
+    else if (hadUser && shouldShowLogin()) showLogin(); // just signed out
+    hadUser = u;
+  });
+
   // ----- invite links (?join=CODE) -----
   const JOIN_KEY = 'edh-tracker:pendingJoin';
   const pendingJoinCode = () => localStorage.getItem(JOIN_KEY);
   function captureJoinParam() {
     const q = new URLSearchParams(location.search); const code = (q.get('join') || '').trim().toUpperCase();
     if (!code) return;
-    if (/^[A-Z0-9]{8}$/.test(code)) localStorage.setItem(JOIN_KEY, code);
+    if (/^[A-Z0-9]{8}$/.test(code)) { localStorage.setItem(JOIN_KEY, code); freshInvite = true; }
     q.delete('join'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
   }
   function inviteLink(code) { return `${location.origin}${location.pathname}?join=${code}`; }
@@ -1574,13 +1615,16 @@
   captureJoinParam();
   renderTab();
   if (data.current) openGame();
+  const oauthReturn = /[?&](code|error)=/.test(location.search);
+  if (shouldShowLogin() || (oauthReturn && !me())) showLogin({ busy: oauthReturn && !!cloud });
   if (cloud) cloud.init().then((res = {}) => {
     requestRender();
+    if (me()) hideLogin(); else if (loginVisible()) showLogin({ error: res.error || '' });
     if (!$('#game').hidden) return;
     if (res.justSignedIn && me()) { toast(`Signed in as ${me().display_name}`); afterSignIn(true); return; }
-    if (res.error) { toast(res.error); openAuth('google', { note: esc(res.error) }); return; }
+    if (res.error && !loginVisible()) { toast(res.error); openAuth('google', { note: esc(res.error) }); return; }
     if (res.wrongPlace && !me()) { oauthWrongPlace(); return; }
-    if (pendingJoinCode()) handlePendingJoin();
+    if (pendingJoinCode() && (me() || (freshInvite && !loginVisible()))) handlePendingJoin();
   });
   else if (pendingJoinCode()) toast('Connect to the internet to join the playgroup');
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

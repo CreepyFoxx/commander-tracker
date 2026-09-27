@@ -1,9 +1,11 @@
 /* Commander Tracker service worker: offline app shell, stale-while-revalidate. */
-const CACHE = 'edh-tracker-v1.2.1';
+const CACHE = 'edh-tracker-v1.3.0';
 const ASSETS = [
   './', 'index.html', 'styles.css', 'app.js', 'cloud.js', 'manifest.json',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'
 ];
+// Login backgrounds: precached when present; a missing file never breaks the install (bump CACHE when replacing them)
+const OPTIONAL = ['img/login-phone.jpg', 'img/login-tablet.jpg'];
 // supabase-js, pinned (immutable URL): cached for offline use; the Supabase API itself is never cached
 const CDN = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js'];
 const CDN_HOST = 'cdn.jsdelivr.net';
@@ -15,6 +17,7 @@ self.addEventListener('install', (e) => {
     await c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })));
     // the CDN copy is optional: a CDN hiccup must not break installing the app shell (online features then load later)
     await Promise.all(CDN.map((u) => c.add(new Request(u, { mode: 'cors', credentials: 'omit' })).catch(() => {})));
+    await Promise.all(OPTIONAL.map((u) => c.add(new Request(u, { cache: 'reload' })).catch(() => {})));
   }));
 });
 

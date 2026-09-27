@@ -40,3 +40,12 @@ Optional. Without an account the app works exactly as before, 100% local.
   group's games and stats. Guests (people without the app) are remembered per group and get their own stats.
 - Offline: finished games queue on the phone and upload automatically when the connection is back ("pending sync" pill).
 - Tests: `tools/test.mjs` (local mode), `tools/test-online.mjs` (online flows; needs seeded test accounts).
+
+## Login screen backgrounds (v1.3)
+- Phone: `public/img/login-phone.jpg`, about 1290x2796 px, portrait (used below 768 px width).
+- Tablet: `public/img/login-tablet.jpg`, about 2048x2732 px, portrait (used from 768 px width; in iPad landscape it is
+  cropped with `background-size: cover`, so keep the subject near the centre).
+- The current files are generated gradient placeholders (`tools/make-login-placeholders.mjs`). To swap: overwrite the two
+  JPGs (sRGB, quality ~75-80, ideally < 500 KB each), bump `CACHE` in `public/sw.js`, deploy.
+- Focal point for cropping: `--login-focus-phone` / `--login-focus-tablet` in `styles.css` (default `50% 35%`).
+- A dark gradient overlay (`.login-shade`) keeps the text and buttons readable on any photo.

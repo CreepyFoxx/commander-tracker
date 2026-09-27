@@ -108,6 +108,10 @@
     location.assign(url);
     return url;
   }
+  async function invitePreview(code) { // group name for an invite code (works signed out); null if unknown/offline
+    if (!sb || !online()) return null;
+    try { const { data, error } = await sb.rpc('invite_preview', { p_code: String(code || '') }); return error ? null : data; } catch (e) { return null; }
+  }
   async function setPassword(pw) {
     need(st.user && sb, 'Sign in first');
     need(String(pw || '').length >= 6, 'Password must be at least 6 characters.');
@@ -339,7 +343,7 @@
   window.EDHCloud = {
     available: !!sb, uuid, USERNAME_RE,
     on: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
-    init, refresh, sync, signIn, signUp, signOut, updateProfile, signInWithGoogle, googleAuthUrl, googleAvailable, setPassword, APP_URL,
+    init, refresh, sync, signIn, signUp, signOut, updateProfile, signInWithGoogle, googleAuthUrl, googleAvailable, setPassword, invitePreview, APP_URL,
     createGroup, joinGroup, leaveGroup, setGroup, saveDeck, deleteDeck, queueGame, deleteGame,
     user: () => st.user, groupId: () => (st.user ? st.groupId : null), groups: () => st.groups,
     group: () => st.groups.find((g) => g.id === st.groupId) || null,
