@@ -409,12 +409,12 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(157, 123, 
 .gc-place { justify-self: start; color: var(--muted); font-weight: 750; font-size: 11.5px; padding: 2px 7px; border-radius: 8px; background: rgba(255, 255, 255, .06); font-family: var(--font-num); }
 .gc-p.win .gc-place { color: #2a1904; background: var(--gold); }
 .gc-p .seat-dot.sm { display: inline-block; width: 8px; height: 8px; margin-right: 6px; vertical-align: 1px; }
-.empty { text-align: center; padding: 44px 20px; }
+div.empty { text-align: center; padding: 44px 20px; }
 .empty-ico { width: 84px; height: 84px; margin: 0 auto 16px; border-radius: 28px; display: grid; place-items: center; color: #cbb9ff; font-size: 40px;
   background: radial-gradient(circle at 50% 30%, rgba(157, 123, 255, .3), rgba(114, 83, 255, .08)); box-shadow: inset 0 0 0 1px rgba(172, 152, 255, .3), 0 18px 40px -16px rgba(114, 83, 255, .9); }
 .empty-ico svg { width: 40px; height: 40px; stroke-width: 1.7; }
-.empty p { margin: 4px 0 14px; }
-.empty > p:first-of-type { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+div.empty p { margin: 4px 0 14px; }
+div.empty > p:first-of-type { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
 .foot-note { margin: 18px 10px; }
 
 #toast {
