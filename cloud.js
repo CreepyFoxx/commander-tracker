@@ -200,8 +200,9 @@
         if (st.groupId) await fetchGroupData(st.groupId);
         noteNet(null); st.lastError = ''; emit(); return true;
       } catch (e) {
-        noteNet(e); st.lastError = friendlyError(e); emit();
+        noteNet(e); st.lastError = friendlyError(e);
         if (e && (e.status === 401 || /jwt|refresh token/i.test(String(e.message)))) st.lastError = 'Session expired — please sign in again.';
+        emit();
         return false;
       } finally { refreshing = null; }
     })();
@@ -254,9 +255,11 @@
     const g = G(gid); g.games = [game, ...g.games.filter((x) => x.id !== game.id)];
     emit(); sync(); return game;
   }
+  let inFlight = null; // queue item currently being uploaded
   function deleteGame(id) {
     const qi = st.queue.findIndex((q) => q.type === 'game' && q.game.id === id);
-    if (qi >= 0) st.queue.splice(qi, 1); else st.queue.push({ type: 'delete', id });
+    // not uploaded yet: just drop it. If it is being uploaded right now, let that finish and delete it afterwards.
+    if (qi >= 0 && st.queue[qi] !== inFlight) st.queue.splice(qi, 1); else st.queue.push({ type: 'delete', id });
     Object.values(st.byGroup).forEach((g) => { g.games = g.games.filter((x) => x.id !== id); });
     emit(); sync();
   }
@@ -269,7 +272,7 @@
         const { data: { session } } = await sb.auth.getSession();
         if (!session) { st.lastError = 'Signed out — sign in to upload pending games.'; emit(); return false; }
         while (st.queue.length) {
-          const item = st.queue[0];
+          const item = st.queue[0]; inFlight = item;
           if (item.type === 'game') {
             const game = item.game;
             for (const p of game.players) {
@@ -285,17 +288,23 @@
             const { error } = await sb.from('games').delete().eq('id', item.id);
             if (error) throw error;
           }
-          st.queue.shift(); st.lastSync = Date.now(); st.lastError = ''; noteNet(null); emit();
+          // remove exactly this item (the queue may have changed while the request was running)
+          const done = st.queue.indexOf(item); if (done >= 0) st.queue.splice(done, 1);
+          inFlight = null; st.lastSync = Date.now(); st.lastError = ''; noteNet(null); emit();
         }
         return true;
       } catch (e) {
         st.lastError = friendlyError(e); noteNet(e);
         if (!isNetErr(e)) { // a permanent error (e.g. no longer a member): park the item at the end so others can proceed
-          const bad = st.queue.shift(); bad.error = st.lastError; bad.tries = (bad.tries || 0) + 1;
-          if (bad.tries < 5) st.queue.push(bad); else console.warn('dropping unsyncable item', bad);
+          const bad = inFlight; const bi = bad ? st.queue.indexOf(bad) : -1;
+          if (bi >= 0) {
+            st.queue.splice(bi, 1); bad.error = st.lastError; bad.tries = (bad.tries || 0) + 1;
+            const deletedMeanwhile = bad.type === 'game' && st.queue.some((q) => q.type === 'delete' && q.id === bad.game.id);
+            if (deletedMeanwhile) { /* user deleted it while it was uploading: nothing left to do */ } else if (bad.tries < 5) st.queue.push(bad); else console.warn('dropping unsyncable item', bad);
+          }
         }
         emit(); return false;
-      } finally { syncing = null; }
+      } finally { syncing = null; inFlight = null; }
     })();
     return syncing;
   }

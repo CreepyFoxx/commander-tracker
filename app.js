@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.4.0';
+  const APP_VERSION = '1.4.1';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -36,14 +36,11 @@
     turns: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.7M4 4v4.7h4.7"/><path d="M12 8v4.2l2.8 1.7"/></svg>',
     hourglass: '<svg viewBox="0 0 24 24"><path d="M6.5 3h11M6.5 21h11M7.5 3c0 5 9 5.5 9 9s-9 4-9 9M16.5 3c0 5-9 5.5-9 9s9 4 9 9"/></svg>',
     first: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4.5c4-2.5 7 2.5 13 0v9c-6 2.5-9-2.5-13 0"/></svg>',
-    percent: '<svg viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></svg>',
     shield: '<svg viewBox="0 0 24 24"><path d="M12 2.5 4 5.5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10v-6z"/><path d="M9 11.5l2 2 4-4"/></svg>',
     chart: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
     history: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     skull: '<svg viewBox="0 0 24 24"><path d="M12 3C7.6 3 4.5 6.1 4.5 10.2c0 2.4 1.1 4.2 2.8 5.3V19a1 1 0 0 0 1 1h7.4a1 1 0 0 0 1-1v-3.5c1.7-1.1 2.8-2.9 2.8-5.3C19.5 6.1 16.4 3 12 3z"/><circle cx="9.2" cy="11" r="1.6" fill="currentColor"/><circle cx="14.8" cy="11" r="1.6" fill="currentColor"/><path d="M10.5 20v-2.5M13.5 20v-2.5"/></svg>',
-    flame: '<svg viewBox="0 0 24 24"><path d="M12 21c-4 0-7-2.7-7-6.5 0-3.2 2.3-5.3 3.6-7.1.4 1.8 1.4 3 2.6 3.4C11 7.4 12.6 4.6 15.2 3c-.3 2.7.9 4.6 2.2 6.3 1.1 1.4 1.6 3 1.6 4.8C19 18.3 16 21 12 21z"/></svg>',
     flag: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4.5c4-2.5 7 2.5 13 0v9c-6 2.5-9-2.5-13 0"/></svg>',
-    sword2: '<svg viewBox="0 0 24 24"><path d="M14.5 3.5H20.5V9.5L9 21 3 15z"/><path d="M6 12l6 6M4 20l2-2"/></svg>',
   };
   // commander colour identity as a CSS gradient (deck accent strips, commander bars)
   const MANA_HEX = { W: '#f6efd2', U: '#3f8fe6', B: '#a594ad', R: '#ee5a40', G: '#2fb266', C: '#b8bbc9' };
@@ -233,7 +230,7 @@
     const s = getSetup(); const seatName = s.seats[i].name.trim().toLowerCase();
     let q = '';
     const last = lastPlayedMap();
-    const ov = openSheet(`<div class="sheet-head"><h2>Commander · seat ${i + 1}</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>Commander · seat ${i + 1}</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body"><input type="search" class="search" placeholder="Search or type a new commander" data-role="q" autocomplete="off" autocapitalize="words">
       <div class="pick-list" data-role="list"></div></div>`, { cls: 'tall' });
     const list = ov.querySelector('[data-role=list]');
@@ -270,11 +267,11 @@
     const st = { name: c ? c.name : opts.name || '', partner: c ? c.partner : '', colors: c ? c.colors.slice() : [], owner: c ? c.owner : opts.owner || '' };
     const stats = c ? commanderStats().get(c.id) : null;
     const recent = c ? data.games.filter((g) => g.players.some((p) => p.commanderId === c.id)).slice(0, 5) : [];
-    const ov = openSheet(`<div class="sheet-head"><h2>${c ? 'Edit commander' : 'New commander'}</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>${c ? 'Edit commander' : 'New commander'}</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <div class="field"><label>Commander name</label><input type="text" data-f="name" value="${esc(st.name)}" placeholder="e.g. Atraxa, Praetors' Voice" autocapitalize="words" maxlength="80"></div>
         <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" value="${esc(st.partner)}" placeholder="Second commander, if any" autocapitalize="words" maxlength="80"></div>
-        <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}" aria-label="${COLOR_NAME[x]}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
+        <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="${st.colors.includes(x)}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
         <div class="field"><label>Owner / player <span class="muted">(optional)</span></label><input type="text" data-f="owner" list="owner-names" value="${esc(st.owner)}" placeholder="Who plays this deck" autocapitalize="words" maxlength="40">
           <datalist id="owner-names">${knownPlayers().map((n) => `<option value="${esc(n)}">`).join('')}</datalist></div>
         ${stats ? `<div class="mini-stats"><div><b>${stats.games}</b><span>games</span></div><div><b>${stats.wins}</b><span>wins</span></div><div><b>${pct(stats.wins, stats.games)}</b><span>win rate</span></div><div><b>${fmtDur(stats.dur / stats.games)}</b><span>avg game</span></div></div>` : ''}
@@ -285,7 +282,7 @@
       const tog = e.target.closest('[data-color]');
       if (tog) {
         const x = tog.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y));
-        tog.classList.toggle('on', st.colors.includes(x)); return;
+        tog.classList.toggle('on', st.colors.includes(x)); tog.setAttribute('aria-pressed', st.colors.includes(x)); return;
       }
       const a = e.target.closest('[data-a]'); if (!a) return;
       $$('[data-f]', ov).forEach((inp) => { st[inp.dataset.f] = inp.value.trim(); });
@@ -304,7 +301,13 @@
     });
   }
 
+  let starting = false;
   async function startGame() {
+    if (starting || !$('#game').hidden) return; // double tap on "Start game" / "Rematch"
+    starting = true;
+    try { await startGameInner(); } finally { starting = false; }
+  }
+  async function startGameInner() {
     if (data.current && !(await confirmDialog('A game is in progress. Discard it and start a new one?', 'Discard & start', true))) return;
     const s = getSetup();
     const groupId = gm() ? cloud.groupId() : null;
@@ -421,9 +424,9 @@
       out.push(`<span class="chip cd seat-${o.seat} ${v >= 21 ? 'lethal' : v >= 15 ? 'warn' : ''}" data-act="playerSheet"><i></i>${I.sword}${v}${idx === '1' ? '<sup>P</sup>' : ''}</span>`);
     }
     if (p.poison) out.push(`<span class="chip poison ${p.poison >= 7 ? 'warn' : ''}" data-act="playerSheet">${I.poison}${p.poison}</span>`);
-    if (p.tax[0] || p.tax[1]) out.push(`<span class="chip tax" data-act="playerSheet">${I.cycle}Tax +${p.tax[0] * 2}${p.partnerName ? '/+' + p.tax[1] * 2 : ''}</span>`);
-    if (g.monarch === p.id) out.push(`<span class="chip crown">${I.crown}Monarch</span>`);
-    if (g.initiative === p.id) out.push(`<span class="chip init">${I.castle}Initiative</span>`);
+    if (p.tax[0] || p.tax[1]) out.push(`<span class="chip tax" data-act="playerSheet">${I.cycle}<span class="lbl">Tax </span>+${p.tax[0] * 2}${p.partnerName ? '/+' + p.tax[1] * 2 : ''}</span>`);
+    if (g.monarch === p.id) out.push(`<span class="chip crown">${I.crown}<span class="lbl">Monarch</span></span>`);
+    if (g.initiative === p.id) out.push(`<span class="chip init">${I.castle}<span class="lbl">Initiative</span></span>`);
     return out.join('');
   }
   function updateCenter() {
@@ -501,8 +504,9 @@
     const g = G(); if (!g) return;
     const alive = g.players.filter((p) => !p.eliminated); if (!alive.length) return;
     const winner = alive[rand(alive.length)];
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches; // no flashing roulette, just the result
     const steps = alive.length * 3 + alive.indexOf(winner);
-    let i = 0;
+    let i = reduceMotion ? steps : 0;
     const tick = () => {
       if (G() !== g) return;
       $$('#board .panel').forEach((el) => el.classList.remove('picking'));
@@ -520,7 +524,7 @@
   function openPlayerSheet(pid) {
     const g = G(); const p = P(pid); const rot = +(panelEl(pid).dataset.rot || 0);
     const ov = openSheet(`<div class="sheet-head"><div class="sh-l"><span class="seat-dot seat-${p.seat}"></span><div class="sh-t"><h2>${esc(p.name)}</h2><div class="muted small ellipsis">${p.commanderName ? `<span class="pips">${pips(p.colors)}</span> ${esc(p.commanderName)}${p.partnerName ? ' + ' + esc(p.partnerName) : ''}` : 'No commander'}</div></div></div>
-      <div class="sh-life"><span data-role="life"></span><small>life</small></div><button class="icon-btn" data-close>${I.close}</button></div>
+      <div class="sh-life"><span data-role="life"></span><small>life</small></div><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body" data-role="body"></div>`, { rot, cls: 'player-sheet' });
     const body = ov.querySelector('[data-role=body]');
     const draw = () => { body.innerHTML = playerSheetBody(p); ov.querySelector('[data-role=life]').textContent = p.life; };
@@ -571,7 +575,7 @@
 
   function openGameMenu() {
     const g = G();
-    const ov = openSheet(`<div class="sheet-head"><div><h2>Game menu</h2><div class="muted small" data-role="sub"></div></div><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><div><h2>Game menu</h2><div class="muted small" data-role="sub"></div></div><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <div class="menu-grid">
           <button class="mtile t-violet" data-ga="first"><b>${I.target}</b><span>Random first player</span></button>
@@ -600,8 +604,10 @@
         if (!(await confirmDialog('Restart with the same players? Life and counters reset; this game is not saved.', 'Restart', true))) return;
         closeOverlay(ov);
         g.players.forEach((p) => Object.assign(p, { life: g.startingLife, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, killedBy: null }));
-        Object.assign(g, { id: uid(), startedAt: Date.now(), monarch: null, initiative: null });
+        Object.assign(g, { id: uid(), startedAt: Date.now(), monarch: null, initiative: null, firstPlayerId: null });
+        clearTimeout(winnerPromptTimer); Object.values(deltas).forEach((x) => clearTimeout(x.t)); Object.keys(deltas).forEach((k) => delete deltas[k]);
         save(true); renderGame();
+        if (data.settings.randomFirst) setTimeout(pickFirstPlayer, 350);
       } else if (a === 'abandon') {
         if (!(await confirmDialog('Abandon this game without saving it?', 'Abandon', true))) return;
         closeOverlay(ov); data.current = null; save(true); closeGame();
@@ -622,7 +628,7 @@
     const alive = g.players.filter((p) => !p.eliminated);
     let winner = preWinner || (alive.length === 1 ? alive[0].id : null);
     const mins = Math.max(1, Math.round((Date.now() - g.startedAt) / 60000));
-    const ov = openSheet(`<div class="sheet-head"><h2>End game</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>End game</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <div class="field turns-q"><label>How many turns did the game take?</label>
           <div class="stepper"><button class="cbtn" data-step="-1" aria-label="fewer turns">−</button><input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" data-f="turns" placeholder="?"><button class="cbtn plus" data-step="1" aria-label="more turns">+</button></div>
@@ -685,7 +691,7 @@
   }
   function showResult(rec) {
     const w = rec.winnerIndex != null ? rec.players[rec.winnerIndex] : null;
-    const ov = openSheet(`<div class="dialog-body center"><div class="trophy-big">${I.trophy}</div>
+    const ov = openSheet(`<div class="dialog-body center"><div class="trophy-big ${w ? '' : 'draw'}">${w ? I.trophy : I.flag}</div>
       <h2>${w ? esc(w.name) + ' wins!' : 'Draw'}</h2>${w && w.commanderName ? `<div class="muted"><span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}${w.partnerName ? ' + ' + esc(w.partnerName) : ''}</div>` : ''}
       <div class="muted small">${fmtDur(rec.durationMs)}${rec.turns ? ` · ${rec.turns} turns` : ''} · ${rec.pendingSync ? 'saved — will sync when online' : 'saved to history'}</div>
       <div class="dialog-actions"><button class="btn primary" data-r="rematch">Rematch</button><button class="btn" data-r="stats">View stats</button><button class="btn ghost" data-close>Done</button></div></div>`, { dialog: true });
@@ -795,6 +801,8 @@
     // win-rate bar; the thin marker shows the "fair share" baseline (1 / avg players)
     const bar = (label, pre, s, cls = '', fill = '') => `<div class="bar-row"><span class="bar-label">${pre}<span class="ellipsis">${label}</span></span><div class="bar ${cls}" style="--base:${base}%${fill ? ';--fill:' + fill : ''}"><i style="width:${s.g ? Math.round((s.w / s.g) * 100) : 0}%"></i></div><span class="bar-val">${pct(s.w, s.g)}<small>${s.w}/${s.g}</small></span></div>`;
     const baseNote = `<div class="bar-note">fair share ≈ ${base}% (1 in ${avgP.toFixed(1)} players)</div>`;
+    // commander chart: name on its own line (full width), bar underneath
+    const sbar = (label, pre, s2, fill) => `<div class="bar-row stack"><div class="bs-top"><span class="bar-label">${pre}<span class="ellipsis">${label}</span></span><span class="bar-val"><small>${s2.w}/${s2.g}</small>${pct(s2.w, s2.g)}</span></div><div class="bar deck" style="--base:${base}%;--fill:${fill}"><i style="width:${s2.g ? Math.round((s2.w / s2.g) * 100) : 0}%"></i></div></div>`;
     const reasonTotal = Object.values(reasons).reduce((a, b) => a + b, 0);
     const players = [...byPlayer.values()].sort((a, b) => b.g - a.g || b.w - a.w);
     const topPlayer = players.length > 1 ? players.filter((p) => p.w > 0).sort((a, b) => b.w / b.g - a.w / a.g || b.g - a.g)[0] : null;
@@ -808,6 +816,7 @@
         <div class="tile t-rose"><i class="t-ico">${I.users}</i><b>${avgP.toFixed(1)}</b><span>avg players</span></div>
         ${meMode ? `<div class="tile t-gold"><i class="t-ico">${I.trophy}</i><b>${pct(myWins, myGames)}</b><span>your win rate (${myWins}/${myGames})</span></div>` : `<div class="tile t-gold"><i class="t-ico">${I.first}</i><b>${firstGames ? pct(firstWins, firstGames) : '—'}</b><span>first-player win rate</span></div>`}
       </div>
+      <div class="card-flow">
       <section class="card"><div class="card-title">Highlights</div>
         ${most ? `<div class="hl-row"><span class="muted">Most played</span><span class="hl-v"><span class="pips">${pips(most.colors)}</span> ${esc(most.label)} <small>${most.g} game${most.g === 1 ? '' : 's'}</small></span></div>` : ''}
         ${best ? `<div class="hl-row"><span class="muted">Best win rate${minG > 1 ? ' (3+ games)' : ''}</span><span class="hl-v"><span class="pips">${pips(best.colors)}</span> ${esc(best.label)} <small>${pct(best.w, best.g)}</small></span></div>` : ''}
@@ -819,7 +828,7 @@
         <div class="ptable"><div class="pt-head"><span>Player</span><span>G</span><span>W</span><span>Win%</span><span>Avg pl.</span></div>
         ${players.map((p) => { const fav = [...p.cmds.entries()].sort((a, b) => b[1] - a[1])[0]; return `<div class="pt-row ${p === topPlayer ? 'top' : ''}"><span class="pt-name"><b>${esc(p.name)}${p.guest ? ' <span class="guest-tag">Guest</span>' : ''}</b>${fav ? `<small>${esc(fav[0])}</small>` : ''}<span class="pt-bar"><i style="width:${Math.round((p.w / p.g) * 100)}%"></i></span></span><span>${p.g}</span><span>${p.w}</span><span class="acc">${pct(p.w, p.g)}</span><span>${(p.placeSum / p.g).toFixed(1)}</span></div>`; }).join('')}</div>
       </section>
-      <section class="card"><div class="card-title">Win rate by color <span class="muted small">baseline ≈ ${Math.round(100 / avgP)}%</span></div>
+      ${cmds.length ? `<section class="card"><div class="card-title">Win rate by color <span class="muted small">baseline ≈ ${Math.round(100 / avgP)}%</span></div>
         ${WUBRG.concat('C').map((c) => bar(COLOR_NAME[c], `<span class="pip pip-${c}"></span>`, colorStats[c], `mana pip-${c}`)).join('')}
         ${baseNote}
       </section>
@@ -827,11 +836,12 @@
         ${['Colorless', 'Mono', 'Two-color', 'Three-color', 'Four-color', 'Five-color'].map((l, i) => (countStats[i].g ? bar(l, `<span class="cnt-pips">${i ? '<i></i>'.repeat(i) : '<i class="o"></i>'}</span>`, countStats[i]) : '')).join('')}
       </section>
       <section class="card"><div class="card-title">${meMode ? 'My decks' : 'Commanders'}</div>
-        ${cmds.sort((a, b) => b.g - a.g || b.w - a.w).map((c) => bar(esc(c.label), `<span class="pips">${pips(c.colors)}</span>`, c, 'deck', manaGrad(c.colors, '90deg'))).join('')}
-      </section>
+        ${cmds.sort((a, b) => b.g - a.g || b.w - a.w).map((c) => sbar(esc(c.label), `<span class="pips">${pips(c.colors)}</span>`, c, manaGrad(c.colors, '90deg'))).join('')}
+      </section>` : ''}
       ${reasonTotal ? `<section class="card"><div class="card-title">How players were eliminated</div>
         ${Object.entries(reasons).filter(([, c]) => c).map(([r, c]) => `<div class="bar-row"><span class="bar-label">${REASON[r][0].toUpperCase() + REASON[r].slice(1)}</span><div class="bar alt"><i style="width:${Math.round((c / reasonTotal) * 100)}%"></i></div><span class="bar-val">${c}</span></div>`).join('')}
-      </section>` : ''}`;
+      </section>` : ''}
+      </div>`;
   }
   function renderHistory(v) {
     const games = allGames(); const myId = me() ? me().id : null;
@@ -955,7 +965,7 @@
     if (!cloud) { toast('Online features need a connection the first time — try again when online.'); return; }
     let color = PROFILE_COLORS[rand(PROFILE_COLORS.length)];
     const classicOpen = mode !== 'google'; if (!classicOpen) mode = 'signin';
-    const ov = openSheet(`<div class="sheet-head"><h2>Sign in</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>Sign in</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         ${opts.note ? `<div class="note-card">${opts.note}</div>` : ''}
         <button class="btn google-btn big block" data-role="google">${G_LOGO}<span>Continue with Google</span></button>
@@ -1021,7 +1031,7 @@
   // when the sign-in finished in Safari instead of the Home Screen app (they don't share storage), or the reverse.
   function oauthWrongPlace() {
     const inSafari = isIOS && !isStandalone();
-    const ov = openSheet(`<div class="sheet-head"><h2>Almost there</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>Almost there</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <p>Google sign-in finished ${inSafari ? 'in Safari instead of the Home Screen app' : 'in a different window than the one that started it'}, so it couldn't be completed here.</p>
         <div class="note-card"><b>Fix:</b> ${inSafari ? 'close Safari, open Commander Tracker from your Home Screen and tap <b>Continue with Google</b> again.' : 'tap Continue with Google again in this window.'}
@@ -1092,7 +1102,7 @@
     const code = pendingJoinCode(); if (!code) return;
     if (!cloud) { toast('Open the app online to join the playgroup'); return; }
     if (!me()) {
-      const ov = openSheet(`<div class="sheet-head"><h2>You're invited!</h2><button class="icon-btn" data-close>${I.close}</button></div>
+      const ov = openSheet(`<div class="sheet-head"><h2>You're invited!</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
         <div class="sheet-body"><p>Join the playgroup with invite code</p><div class="invite-code">${code}</div>
         ${isIOS && !isStandalone() ? '<div class="note-card"><b>Tip:</b> first add this app to your Home Screen (Share → Add to Home Screen), open it from there, sign in with Google and enter this code in Settings → Join with code. The Home Screen app keeps its own sign-in, separate from Safari.</div>' : ''}
         <button class="btn google-btn big block" data-a="google">${G_LOGO}<span>Continue with Google & join</span></button>
@@ -1167,8 +1177,9 @@
     const paint = () => ov.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('on', s.dataset.color === color));
     ov.addEventListener('click', async (e) => {
       const s = e.target.closest('.swatch'); if (s) { color = s.dataset.color; paint(); return; }
-      if (!e.target.closest('[data-role=ok]')) return;
-      try { await cloud.updateProfile({ display_name: ov.querySelector('[data-role=dn]').value, color }); closeOverlay(ov); toast('Profile saved'); renderTab(); } catch (x) { toast(x.message); }
+      const ok = e.target.closest('[data-role=ok]'); if (!ok || ok.disabled) return;
+      ok.disabled = true;
+      try { await cloud.updateProfile({ display_name: ov.querySelector('[data-role=dn]').value, color }); closeOverlay(ov); toast('Profile saved'); renderTab(); } catch (x) { ok.disabled = false; toast(x.message); }
     });
     paint();
   }
@@ -1190,7 +1201,7 @@
       return m ? 'u:' + m.id : 'guest';
     };
     const map = {}; names.forEach((_, k) => { map[k] = guess(k); });
-    const ov = openSheet(`<div class="sheet-head"><h2>Upload local data</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>Upload local data</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <p class="muted small">Copy what's on this phone into <b>${esc(cloud.group().name)}</b>. Your local data stays on the phone as it is.</p>
         <label class="check-row"><input type="checkbox" data-role="decks" checked><span>Add my local commanders as my decks <b data-role="nd"></b></span></label>
@@ -1312,7 +1323,7 @@
     const seats = groupSeats(); const u = me();
     const taken = new Set(seats.slice(0, getSetup().count).filter((x, j) => j !== i && x.kind === 'member').map((x) => x.userId));
     const guests = knownGuests();
-    const ov = openSheet(`<div class="sheet-head"><h2>Seat ${i + 1}: who's playing?</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>Seat ${i + 1}: who's playing?</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <div class="sec-title">Group members</div>
         <div class="pick-list">${cd().members.map((m) => `<button class="pick-row ${seats[i].userId === m.id ? 'on' : ''}" data-member="${m.id}" ${taken.has(m.id) ? 'disabled' : ''}>${dot(m.color, 'lg')}<span class="pr-main"><b>${esc(m.display_name)}${m.id === u.id ? ' (you)' : ''}</b><small>${cd().decks.filter((d) => d.owner_id === m.id).length} decks${taken.has(m.id) ? ' · already seated' : ''}</small></span></button>`).join('')}</div>
@@ -1350,7 +1361,7 @@
     if (seat.kind === 'guest') { openGuestCommanderPicker(i); return; }
     if (seat.kind !== 'member') return;
     const m = memberById(seat.userId); const decks = cd().decks.filter((d) => d.owner_id === seat.userId); const mine = seat.userId === me().id;
-    const ov = openSheet(`<div class="sheet-head"><h2>${esc(m ? m.display_name : 'Player')}'s deck</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>${esc(m ? m.display_name : 'Player')}'s deck</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body"><div class="pick-list">
         ${mine ? '<button class="pick-row new" data-new>+ New deck</button>' : ''}
         ${decks.map((d) => `<button class="pick-row ${d.id === seat.deckId ? 'on' : ''}" data-deck="${d.id}"><span class="pips">${pips(d.colors)}</span><span class="pr-main"><b>${esc(deckLabel(d))}</b>${d.name ? `<small>${esc(d.name)}</small>` : ''}</span></button>`).join('')}
@@ -1366,7 +1377,7 @@
     const seat = groupSeats()[i]; if (seat.kind !== 'guest') return;
     const theirs = guestCommanders(seat.name); const all = allKnownCommanders();
     let q = '';
-    const ov = openSheet(`<div class="sheet-head"><h2>${esc(seat.name)}'s commander</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>${esc(seat.name)}'s commander</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body"><input type="search" class="search" data-role="q" placeholder="Search or type a commander" autocomplete="off" autocapitalize="words">
       <div class="pick-list" data-role="list"></div></div>`, { cls: 'tall' });
     const list = ov.querySelector('[data-role=list]');
@@ -1390,15 +1401,15 @@
   }
   function openGuestCommanderForm(i, name) {
     const seat = groupSeats()[i]; const st = { colors: [] };
-    const ov = openSheet(`<div class="sheet-head"><h2>${esc(seat.name)}'s commander</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>${esc(seat.name)}'s commander</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <div class="field"><label>Commander</label><input type="text" data-f="name" value="${esc(name)}" maxlength="80" autocapitalize="words"></div>
         <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" maxlength="80" autocapitalize="words"></div>
-        <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x}" data-color="${x}">${x}</button>`).join('')}</div></div>
+        <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="false">${x}</button>`).join('')}</div></div>
         <button class="btn primary big block" data-a="ok">Use this commander</button></div>`, { cls: 'tall' });
     ov.addEventListener('click', (e) => {
       const t = e.target.closest('[data-color]');
-      if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); return; }
+      if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); t.setAttribute('aria-pressed', st.colors.includes(x)); return; }
       if (!e.target.closest('[data-a=ok]')) return;
       const n = ov.querySelector('[data-f=name]').value.trim(); if (!n) { toast('Enter the commander name'); return; }
       seat.commander = { name: n, partner: ov.querySelector('[data-f=partner]').value.trim(), colors: st.colors };
@@ -1443,25 +1454,25 @@
       <div class="sec-title">My decks</div>
       ${myDecks.length ? myDecks.map((d) => card(d, true)).join('') : '<div class="card muted small">No decks yet. Add the decks you play so your group can pick them at game setup.</div>'}
       ${others.map((m) => { const ds = decks.filter((d) => d.owner_id === m.id); return `<div class="sec-title">${dot(m.color)} ${esc(m.display_name)}'s decks</div>${ds.length ? ds.map((d) => card(d, false)).join('') : '<div class="card muted small">No decks yet.</div>'}`; }).join('')}
-      ${gc.size ? `<div class="sec-title">Guest commanders</div><section class="card">${[...gc.values()].sort((a, b) => b.g - a.g).map((e) => `<div class="bar-row"><span class="pips">${pips(e.colors)}</span><span class="bar-label"><b>${esc(e.label)}</b> <span class="muted small">${esc(e.who)}</span></span><div class="bar"><i style="width:${Math.round((e.w / e.g) * 100)}%"></i></div><span class="bar-val">${pct(e.w, e.g)}<small>${e.w}/${e.g}</small></span></div>`).join('')}</section>` : ''}`;
+      ${gc.size ? `<div class="sec-title">Guest commanders</div><section class="card">${[...gc.values()].sort((a, b) => b.g - a.g).map((e) => `<div class="bar-row stack"><div class="bs-top"><span class="bar-label"><span class="pips">${pips(e.colors)}</span><span class="ellipsis"><b>${esc(e.label)}</b> <span class="muted small">${esc(e.who)}</span></span></span><span class="bar-val"><small>${e.w}/${e.g}</small>${pct(e.w, e.g)}</span></div><div class="bar deck" style="--fill:${manaGrad(e.colors, '90deg')}"><i style="width:${Math.round((e.w / e.g) * 100)}%"></i></div></div>`).join('')}</section>` : ''}`;
   }
   function openDeckEditor(id, opts = {}) {
     if (!cloud.online()) { toast('Connect to the internet to edit decks'); return; }
     const d = id ? deckById(id) : null;
     const st = { colors: d ? d.colors.slice() : [] };
     const s = d ? commanderStats().get(d.id) : null;
-    const ov = openSheet(`<div class="sheet-head"><h2>${d ? 'Edit deck' : 'New deck'}</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>${d ? 'Edit deck' : 'New deck'}</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <div class="field"><label>Commander</label><input type="text" data-f="commander" value="${esc(d ? d.commander : '')}" maxlength="80" autocapitalize="words" placeholder="e.g. Atraxa, Praetors' Voice"></div>
         <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" value="${esc(d ? d.partner || '' : '')}" maxlength="80" autocapitalize="words"></div>
-        <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
+        <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="${st.colors.includes(x)}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
         <div class="field"><label>Deck name <span class="muted">(optional)</span></label><input type="text" data-f="name" value="${esc(d ? d.name || '' : '')}" maxlength="60" placeholder="e.g. Superfriends"></div>
         ${s ? `<div class="mini-stats"><div><b>${s.games}</b><span>games</span></div><div><b>${s.wins}</b><span>wins</span></div><div><b>${pct(s.wins, s.games)}</b><span>win rate</span></div><div><b>${fmtDur(s.dur / s.games)}</b><span>avg game</span></div></div>` : ''}
         <div class="sheet-actions">${d ? '<button class="btn danger-text" data-a="delete">Delete</button>' : ''}<button class="btn primary grow" data-a="save">${d ? 'Save' : 'Add deck'}</button></div>
       </div>`, { cls: 'tall' });
     ov.addEventListener('click', async (e) => {
       const t = e.target.closest('[data-color]');
-      if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); return; }
+      if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); t.setAttribute('aria-pressed', st.colors.includes(x)); return; }
       const a = e.target.closest('[data-a]'); if (!a) return;
       try {
         if (a.dataset.a === 'save') {
@@ -1643,7 +1654,7 @@
       ['User agent', navigator.userAgent],
     ];
     const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n');
-    const ov = openSheet(`<div class="sheet-head"><h2>Display info</h2><button class="icon-btn" data-close>${I.close}</button></div>
+    const ov = openSheet(`<div class="sheet-head"><h2>Display info</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body"><p class="muted small">Screenshot this screen to report layout issues.</p>
       <div class="diag">${rows.map(([k, v]) => `<div class="diag-row"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
       <button class="btn block" data-role="copy">Copy as text</button></div>`, { cls: 'tall diag-sheet' });

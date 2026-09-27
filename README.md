@@ -72,3 +72,18 @@ Optional. Without an account the app works exactly as before, 100% local.
 - `tools/shot-ui.mjs <prefix>` seeds demo data and screenshots every main screen at 402x812 (standalone), 375x667,
   820x1180 and 1180x820 (`ONLY=phone,ipad` to limit). The v1.4 before/after set is `screenshots/33-before-*` / `33-after-*`.
 
+
+## QA pass (v1.4.1)
+- Fixed: deleting a group game while it was uploading could drop the *next* queued game (sync now removes exactly the
+  item it uploaded; a game deleted mid-upload is deleted right after it lands). "Restart" now starts a clean game (no
+  stale first player). Double-tapping "Start game" no longer opens a "discard?" dialog over the new game. Long names no
+  longer push the end-game winner list off screen. Draws show a neutral result. Stats hide empty colour/commander charts
+  when no commanders were recorded.
+- Polish: slimmer icon-only status chips on narrow panels (5-6 players on a phone), commander chart with full-width names,
+  iPad-landscape stats in two balanced columns, 40px+ tap targets for segmented controls / small buttons / links,
+  accessible names on all icon buttons and colour toggles, keyboard focus ring, higher-contrast secondary text, no
+  roulette flashing under reduced motion, theme colour matches the app background.
+- `tools/qa-explore.mjs` (long/emoji names, 6 players on 375x667, rapid taps, reload, iPad rotation, tap targets, unnamed
+  buttons) and `tools/qa-flows.mjs` (poison, concede, restart, draw, double submit, backup round trip) are exploratory
+  scripts (`OUT=/tmp/qa`, `URL=` to point them at the live site); the regressions they found are covered in `test.mjs` /
+  `test-online.mjs`.
