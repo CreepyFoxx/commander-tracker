@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.5.2';
+  const APP_VERSION = '1.6.0';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -41,6 +41,10 @@
     history: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     skull: '<svg viewBox="0 0 24 24"><path d="M12 3C7.6 3 4.5 6.1 4.5 10.2c0 2.4 1.1 4.2 2.8 5.3V19a1 1 0 0 0 1 1h7.4a1 1 0 0 0 1-1v-3.5c1.7-1.1 2.8-2.9 2.8-5.3C19.5 6.1 16.4 3 12 3z"/><circle cx="9.2" cy="11" r="1.6" fill="currentColor"/><circle cx="14.8" cy="11" r="1.6" fill="currentColor"/><path d="M10.5 20v-2.5M13.5 20v-2.5"/></svg>',
     flag: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4.5c4-2.5 7 2.5 13 0v9c-6 2.5-9-2.5-13 0"/></svg>',
+    up: '<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>',
+    down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
+    hand: '<svg viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10V4.5a1.5 1.5 0 0 1 3 0V11M15 10.5V6a1.5 1.5 0 0 1 3 0v7.5c0 4-2.6 7-6.5 7-2.6 0-4.2-1.3-5.6-3.4L3.8 13.6a1.6 1.6 0 0 1 2.6-1.8L9 14.5V8a1.5 1.5 0 0 1 3 0"/></svg>',
+    palette: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2 0-1.4-1.2-1.6-1.2-2.8 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4C21 6.4 17 3 12 3z"/><circle cx="7.5" cy="11.5" r="1.2"/><circle cx="10" cy="7.5" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>',
     solring: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="14.5" rx="8" ry="5.8"/><ellipse cx="12" cy="14.5" rx="4.2" ry="2.6"/><path d="M12 3.2l2.3 3.1L12 8.7 9.7 6.3z"/></svg>',
   };
   // commander colour identity as a CSS gradient (deck accent strips, commander bars)
@@ -83,12 +87,12 @@
   }
   let data = load();
   let saveTimer = null;
+  const persist = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); return true; } catch (e) { return false; } };
   function save(now) {
     clearTimeout(saveTimer);
-    const run = () => {
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { toast('Could not save — storage full?'); }
-    };
-    if (now) run(); else saveTimer = setTimeout(run, 200);
+    const run = () => { const ok = persist(); if (!ok) toast('Could not save — storage full?'); return ok; };
+    if (now) return run();
+    saveTimer = setTimeout(run, 200); return true;
   }
   window.addEventListener('pagehide', () => save(true));
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(true); else requestWakeLock(); });
@@ -121,6 +125,7 @@
     if (!colors || !colors.length) return '<span class="pip pip-C"></span>';
     return colors.map((c) => `<span class="pip pip-${c}"></span>`).join('');
   }
+  const colorWords = (colors) => (colors && colors.length ? colors.map((x) => COLOR_NAME[x]).join(', ') : 'Colorless');
   const cmdLabel = (c) => (c.partner ? `${c.name} + ${c.partner}` : c.name);
   const getCmd = (id) => (id ? data.commanders.find((c) => c.id === id) : null);
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -141,12 +146,29 @@
   }
 
   // ---------- overlays ----------
+  let fieldSeq = 0;
+  function linkLabels(root) {
+    root.querySelectorAll('.field > label:not([for])').forEach((l) => {
+      const c = l.parentElement.querySelector('input:not([type=checkbox]):not([type=hidden]), select, textarea'); if (!c || c.getAttribute('aria-label')) return;
+      if (!c.id) c.id = 'fld-' + ++fieldSeq; l.htmlFor = c.id;
+    });
+  }
+  const labelObs = new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1 && n.querySelector) linkLabels(n); })));
+  ['#view', '#overlay-root', '#login'].forEach((sel) => { const el = document.querySelector(sel); if (el) { labelObs.observe(el, { childList: true, subtree: true }); linkLabels(el); } });
+  let lastTrigger = null; // the control that opened a sheet (Safari doesn't focus buttons on tap), focus goes back there
+  document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button, [role=button], a'); if (b && !b.closest('.overlay')) lastTrigger = b; }, true);
+  let sheetSeq = 0;
   function openSheet(html, opts = {}) {
     const ov = document.createElement('div');
     const rot = opts.rot || 0;
     ov.className = 'overlay' + (opts.dialog ? ' is-dialog' : '');
-    ov.innerHTML = `<div class="backdrop"></div><div class="rot-frame ${Math.abs(rot) === 90 ? 'side' : ''}" style="--rot:${rot}deg"><div class="sheet ${opts.cls || ''}">${html}</div></div>`;
+    ov.innerHTML = `<div class="backdrop"></div><div class="rot-frame ${Math.abs(rot) === 90 ? 'side' : ''}" style="--rot:${rot}deg"><div class="sheet ${opts.cls || ''}" role="dialog" aria-modal="true" tabindex="-1">${html}</div></div>`;
+    const sheet = ov.querySelector('.sheet'); const title = sheet.querySelector('h2, .dialog-body > p, .dialog-body > .muted');
+    if (title) { title.id = title.id || 'sheet-t' + ++sheetSeq; sheet.setAttribute('aria-labelledby', title.id); }
+    const active = document.activeElement;
+    ov._returnFocus = active && active !== document.body && !active.closest('.overlay') ? active : lastTrigger;
     $('#overlay-root').appendChild(ov);
+    try { sheet.focus({ preventScroll: true }); } catch (e) { /* old browsers */ }
     ov.addEventListener('click', (e) => {
       if (e.target.classList.contains('backdrop') || e.target.closest('[data-close]')) closeOverlay(ov);
     });
@@ -158,7 +180,17 @@
     if (!ov || ov._closing) return; ov._closing = true;
     ov.classList.remove('open');
     if (ov._onClose) ov._onClose();
+    const rf = ov._returnFocus; const top = $$('.overlay').filter((o) => o !== ov && !o._closing).pop();
+    if (top) { const s = top.querySelector('.sheet'); if (s && !s.contains(document.activeElement)) s.focus({ preventScroll: true }); }
+    else if (rf && document.contains(rf) && rf.offsetParent !== null) rf.focus({ preventScroll: true });
     setTimeout(() => { ov.remove(); if (renderQueued && !$('.overlay')) requestRender(); }, 220);
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return; const top = $$('.overlay').filter((o) => !o._closing).pop();
+    if (top) { e.preventDefault(); closeOverlay(top); }
+  });
+  function alertDialog(message, label = 'OK') {
+    return new Promise((resolve) => openSheet(`<div class="dialog-body"><p>${message}</p><div class="dialog-actions"><button class="btn primary" data-close>${esc(label)}</button></div></div>`, { dialog: true, onClose: resolve }));
   }
   function refreshOverlays() { $$('.overlay').forEach((ov) => ov._refresh && !ov._closing && ov._refresh()); }
   function choiceDialog(message, choices, opts = {}) {
@@ -185,7 +217,7 @@
     ({ play: renderPlay, commanders: renderCommanders, stats: renderStats, history: renderHistory, settings: renderSettings })[tab](v);
   }
   function setTab(t) {
-    tab = t; renderTab(); window.scrollTo(0, 0);
+    tab = t; histLimit = 50; renderTab(); window.scrollTo(0, 0);
     const v = $('#view'); v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); // gentle view-in (disabled under reduced motion)
   }
 
@@ -213,7 +245,7 @@
     <section class="card">
       <div class="field"><label>Players</label><div class="seg">${[2, 3, 4, 5, 6].map((n) => `<button data-act="setCount" data-v="${n}" class="${s.count === n ? 'on' : ''}">${n}</button>`).join('')}</div></div>
       <div class="field"><label>Starting life</label><div class="seg" id="life-seg">${LIFE_PRESETS.map((n) => `<button data-act="setLife" data-v="${n}" class="${s.life === n ? 'on' : ''}">${n}</button>`).join('')}
-        <input class="seg-input ${LIFE_PRESETS.includes(s.life) ? '' : 'on'}" type="number" inputmode="numeric" min="1" max="999" placeholder="Other" value="${LIFE_PRESETS.includes(s.life) ? '' : s.life}" data-bind="customLife"></div></div>
+        <input class="seg-input ${LIFE_PRESETS.includes(s.life) ? '' : 'on'}" type="number" inputmode="numeric" min="1" max="999" placeholder="Other" aria-label="Other starting life" value="${LIFE_PRESETS.includes(s.life) ? '' : s.life}" data-bind="customLife"></div></div>
       <label class="switch-row"><span>Random first player</span><input type="checkbox" data-bind="randomFirst" ${data.settings.randomFirst ? 'checked' : ''}><i class="switch"></i></label>
     </section>
     <section class="card">
@@ -223,7 +255,7 @@
         return `<div class="seat-row">
           <span class="seat-dot seat-${i}">${i + 1}</span>
           <div class="seat-fields">
-            <input type="text" list="player-names" placeholder="Player ${i + 1}" value="${esc(seat.name)}" data-bind="seatName" data-i="${i}" autocomplete="off" autocapitalize="words" enterkeyhint="done" maxlength="24">
+            <input type="text" list="player-names" placeholder="Player ${i + 1}" aria-label="Player ${i + 1} name" value="${esc(seat.name)}" data-bind="seatName" data-i="${i}" autocomplete="off" autocapitalize="words" enterkeyhint="done" maxlength="24">
             <button class="cmd-pick ${c ? '' : 'empty'}" data-act="pickCmd" data-i="${i}">${c ? `<span class="pips">${pips(c.colors)}</span><span class="ellipsis">${esc(cmdLabel(c))}</span>` : '<span>Choose commander…</span>'}</button>
           </div></div>`;
       }).join('')}
@@ -238,7 +270,7 @@
     let q = '';
     const last = lastPlayedMap();
     const ov = openSheet(`<div class="sheet-head"><h2>Commander · seat ${i + 1}</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
-      <div class="sheet-body"><input type="search" class="search" placeholder="Search or type a new commander" data-role="q" autocomplete="off" autocapitalize="words">
+      <div class="sheet-body"><input type="search" class="search" placeholder="Search or type a new commander" aria-label="Search or type a new commander" data-role="q" autocomplete="off" autocapitalize="words">
       <div class="pick-list" data-role="list"></div></div>`, { cls: 'tall' });
     const list = ov.querySelector('[data-role=list]');
     const draw = () => {
@@ -352,8 +384,17 @@
     document.body.classList.remove('in-game');
     clearInterval(clockTimer); releaseWakeLock(); renderTab();
   }
+  // v1.6: one-time hint on the first game. Its own key, so the saved data format is unchanged.
+  const HINT_KEY = 'edh-tracker:tapHint'; let hintTimer = null;
+  const hintSeen = () => { try { return !!localStorage.getItem(HINT_KEY); } catch (e) { return true; } };
+  function dismissTapHint() {
+    const els = $$('#board .tap-hint'); clearTimeout(hintTimer); if (!els.length) return;
+    try { localStorage.setItem(HINT_KEY, '1'); } catch (e) { /* private mode */ }
+    els.forEach((el) => { el.classList.add('out'); setTimeout(() => el.remove(), 400); });
+    const sr = $('#tap-hint-sr'); if (sr) sr.remove();
+  }
   function renderGame() {
-    const g = G(); const L = LAYOUTS[g.players.length];
+    const g = G(); const L = LAYOUTS[g.players.length]; const hint = !hintSeen();
     $('#game').innerHTML = `<div id="board" class="n${g.players.length}" style="grid-template-rows:repeat(${L.rows},1fr);grid-template-columns:repeat(${L.cols},1fr)">
       ${g.players.map((p, i) => {
         const [r, c, span, rot] = L.seats[i];
@@ -365,8 +406,10 @@
           <div class="p-center"><div class="p-life-box"><div class="p-delta"></div><div class="p-life"></div></div></div>
           <div class="p-foot"><div class="chips"></div></div>
           <div class="p-dead"><div class="skull">${I.skull}</div><div class="p-dead-txt"></div></div>
+          ${hint ? `<div class="tap-hint" aria-hidden="true"><span class="th-row th-plus"><i>${I.up}</i><b>Tap</b> +1</span><span class="th-mid"><i>${I.hand}</i>Hold for ±10</span><span class="th-row th-minus"><i>${I.down}</i><b>Tap</b> −1</span></div>` : ''}
         </div></div>`;
       }).join('')}
+      ${hint ? '<p class="sr-only" id="tap-hint-sr" role="status">Tip: tap the top half of your panel for plus 1, the bottom half for minus 1, hold for 10.</p>' : ''}
       <button id="center-btn" data-act="gameMenu" aria-label="Game menu"><span class="cb-spin" aria-hidden="true"><span class="cb-face cb-timer"><span class="cb-clock"></span><span class="cb-menu">${I.more}</span></span><span class="cb-face cb-tod"><span class="cb-tod-ico">${I.clock}</span><span class="cb-time"></span></span></span></button>
     </div>`;
     const board = $('#board');
@@ -379,6 +422,7 @@
       e.preventDefault(); const pid = z.closest('.panel').dataset.pid; changeLife(pid, +z.dataset.d * (e.shiftKey ? 10 : 1)); flashZone(z);
     });
     updateAllPanels(); updateCenter();
+    clearTimeout(hintTimer); if (hint) hintTimer = setTimeout(dismissTapHint, 15000);
   }
   // Safe-area insets become inner padding, mapped from screen edges to the panel's own (rotated) edges
   function safePad(L, r, c, span, rot) {
@@ -436,13 +480,13 @@
     for (const [k, v] of Object.entries(p.cmd)) {
       if (!v) continue;
       const [oid, idx] = k.split(':'); const o = P(oid); if (!o) continue;
-      out.push(`<span class="chip cd seat-${o.seat} ${v >= 21 ? 'lethal' : v >= 15 ? 'warn' : ''}" data-act="playerSheet"><i></i>${I.sword}${v}${idx === '1' ? '<sup>P</sup>' : ''}</span>`);
+      out.push(`<button type="button" class="chip cd seat-${o.seat} ${v >= 21 ? 'lethal' : v >= 15 ? 'warn' : ''}" data-act="playerSheet" aria-label="${v} commander damage from ${esc(o.name)}${idx === '1' ? ' (partner)' : ''}"><i></i>${I.sword}${v}${idx === '1' ? '<sup>P</sup>' : ''}</button>`);
     }
-    if (p.poison) out.push(`<span class="chip poison ${p.poison >= 7 ? 'warn' : ''}" data-act="playerSheet">${I.poison}${p.poison}</span>`);
-    if (p.tax[0] || p.tax[1]) out.push(`<span class="chip tax" data-act="playerSheet">${I.cycle}<span class="lbl">Tax </span>+${p.tax[0] * 2}${p.partnerName ? '/+' + p.tax[1] * 2 : ''}</span>`);
-    if (g.monarch === p.id) out.push(`<span class="chip crown">${I.crown}<span class="lbl">Monarch</span></span>`);
-    if (g.initiative === p.id) out.push(`<span class="chip init">${I.castle}<span class="lbl">Initiative</span></span>`);
-    if (p.solRing) out.push(`<span class="chip sol" data-act="playerSheet" role="img" aria-label="Turn 1 Sol Ring">${I.solring}<span class="lbl">Sol Ring</span></span>`);
+    if (p.poison) out.push(`<button type="button" class="chip poison ${p.poison >= 7 ? 'warn' : ''}" data-act="playerSheet" aria-label="${p.poison} poison">${I.poison}${p.poison}</button>`);
+    if (p.tax[0] || p.tax[1]) { const tx = `+${p.tax[0] * 2}${p.partnerName ? '/+' + p.tax[1] * 2 : ''}`; out.push(`<button type="button" class="chip tax" data-act="playerSheet" aria-label="Commander tax ${tx}">${I.cycle}<span class="lbl">Tax </span>${tx}</button>`); }
+    if (g.monarch === p.id) out.push(`<span class="chip crown" role="img" aria-label="Monarch">${I.crown}<span class="lbl">Monarch</span></span>`);
+    if (g.initiative === p.id) out.push(`<span class="chip init" role="img" aria-label="Initiative">${I.castle}<span class="lbl">Initiative</span></span>`);
+    if (p.solRing) out.push(`<button type="button" class="chip sol" data-act="playerSheet" aria-label="Turn 1 Sol Ring">${I.solring}<span class="lbl">Sol Ring</span></button>`);
     return out.join('');
   }
   // Centre button (v1.5.2): the game timer slowly turns (CSS animation on .cb-spin) so every seat can read it, and every
@@ -472,7 +516,7 @@
     d.classList.toggle('show', !!v); d.classList.toggle('neg', v < 0);
   }
   function changed(p) { checkElim(p); updatePanel(p); refreshOverlays(); save(); }
-  function changeLife(pid, d) { const p = P(pid); if (!p) return; p.life += d; bumpDelta(p, d); changed(p); }
+  function changeLife(pid, d) { const p = P(pid); if (!p) return; dismissTapHint(); p.life += d; bumpDelta(p, d); changed(p); }
   function changeCmd(p, key, d) {
     const cur = p.cmd[key] || 0; const nv = Math.max(0, cur + d); const real = nv - cur; if (!real) return;
     p.cmd[key] = nv; p.life -= real; bumpDelta(p, -real); changed(p);
@@ -574,8 +618,8 @@
     });
     draw();
   }
-  function counterRow(label, val, attrs, cls = '', max = '') {
-    return `<div class="cnt-row ${cls}">${label}<button class="cbtn" ${attrs} data-d="-1" aria-label="minus">−</button><span class="cnt-val">${val}${max ? `<small>/${max}</small>` : ''}</span><button class="cbtn plus" ${attrs} data-d="1" aria-label="plus">+</button></div>`;
+  function counterRow(label, val, attrs, cls = '', max = '', what = '') {
+    return `<div class="cnt-row ${cls}">${label}<button class="cbtn" ${attrs} data-d="-1" aria-label="${what ? 'Less ' + what : 'minus'}">−</button><span class="cnt-val">${val}${max ? `<small>/${max}</small>` : ''}</span><button class="cbtn plus" ${attrs} data-d="1" aria-label="${what ? 'More ' + what : 'plus'}">+</button></div>`;
   }
   function playerSheetBody(p) {
     const g = G(); const opps = g.players.filter((o) => o.id !== p.id);
@@ -583,16 +627,16 @@
       const srcs = [o.commanderName || 'Commander']; if (o.partnerName) srcs.push(o.partnerName);
       return srcs.map((nm, idx) => {
         const k = o.id + ':' + idx; const v = p.cmd[k] || 0;
-        return counterRow(`<span class="seat-dot sm seat-${o.seat}"></span><div class="cnt-label"><b>${esc(o.name)}</b><small>${esc(nm)}</small></div>`, v, `data-pa="cmd" data-k="${k}"`, v >= 21 ? 'lethal' : v >= 15 ? 'warn' : '');
+        return counterRow(`<span class="seat-dot sm seat-${o.seat}"></span><div class="cnt-label"><b>${esc(o.name)}</b><small>${esc(nm)}</small></div>`, v, `data-pa="cmd" data-k="${k}"`, v >= 21 ? 'lethal' : v >= 15 ? 'warn' : '', '', `commander damage from ${esc(o.name)} (${esc(nm)})`);
       }).join('');
     }).join('');
     const taxRows = [p.commanderName || 'Commander'].concat(p.partnerName ? [p.partnerName] : []).map((nm, i) =>
-      counterRow(`<span class="cnt-ico tax">${I.cycle}</span><div class="cnt-label"><b>Casts: ${esc(nm)}</b><small>Tax +${p.tax[i] * 2}</small></div>`, p.tax[i], `data-pa="tax" data-i="${i}"`)).join('');
+      counterRow(`<span class="cnt-ico tax">${I.cycle}</span><div class="cnt-label"><b>Casts: ${esc(nm)}</b><small>Tax +${p.tax[i] * 2}</small></div>`, p.tax[i], `data-pa="tax" data-i="${i}"`, '', '', `casts of ${esc(nm)}`)).join('');
     return `<div class="ps-grid">
       <section><div class="sec-title">Commander damage taken</div>${cmdRows}<p class="hint">Also reduces life. 21 from a single commander is lethal.</p></section>
       <section><div class="sec-title">Life & counters</div>
-        ${counterRow(`<span class="cnt-ico life">${I.heart}</span><div class="cnt-label"><b>Life</b><small>adjust by 1</small></div>`, p.life, 'data-pa="life"')}
-        ${counterRow(`<span class="cnt-ico poison">${I.poison}</span><div class="cnt-label"><b>Poison</b><small>10 = loss</small></div>`, p.poison, 'data-pa="poison"', p.poison >= 10 ? 'lethal' : p.poison >= 7 ? 'warn' : '', 10)}
+        ${counterRow(`<span class="cnt-ico life">${I.heart}</span><div class="cnt-label"><b>Life</b><small>adjust by 1</small></div>`, p.life, 'data-pa="life"', '', '', 'life')}
+        ${counterRow(`<span class="cnt-ico poison">${I.poison}</span><div class="cnt-label"><b>Poison</b><small>10 = loss</small></div>`, p.poison, 'data-pa="poison"', p.poison >= 10 ? 'lethal' : p.poison >= 7 ? 'warn' : '', 10, 'poison')}
         ${taxRows}
         <div class="toggle-row three"><button class="tbtn ${g.monarch === p.id ? 'on' : ''}" data-pa="monarch" aria-pressed="${g.monarch === p.id}">${I.crown}Monarch</button><button class="tbtn ${g.initiative === p.id ? 'on' : ''}" data-pa="initiative" aria-pressed="${g.initiative === p.id}">${I.castle}Initiative</button>
           <button class="tbtn sol ${p.solRing ? 'on' : ''}" data-pa="solring" aria-pressed="${!!p.solRing}" aria-label="Turn 1 Sol Ring">${I.solring}T1 Sol Ring</button></div>
@@ -659,7 +703,7 @@
     const ov = openSheet(`<div class="sheet-head"><h2>End game</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <div class="field turns-q"><label>How many turns did the game take?</label>
-          <div class="stepper"><button class="cbtn" data-step="-1" aria-label="fewer turns">−</button><input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" data-f="turns" placeholder="?"><button class="cbtn plus" data-step="1" aria-label="more turns">+</button></div>
+          <div class="stepper"><button class="cbtn" data-step="-1" aria-label="fewer turns">−</button><input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" data-f="turns" placeholder="?" aria-label="Number of turns"><button class="cbtn plus" data-step="1" aria-label="more turns">+</button></div>
           <div class="muted small">Leave blank if unknown.</div></div>
         <div class="field dur-field"><label>Duration (minutes)</label><input type="number" inputmode="numeric" min="1" max="1440" data-f="mins" value="${mins}"></div>
         <div class="sec-title">Who won?</div><div class="win-list" data-role="list"></div>
@@ -688,7 +732,7 @@
       const byPos = g.players.map((p, i) => ({ p, i, pos: pos[i] })).sort((a, b) => a.pos - b.pos);
       orderEl.innerHTML = byPos.map(({ p, i, pos: k }) => `<button class="to-chip ${k === 1 ? 'on' : ''}" data-first="${i}" aria-pressed="${k === 1}" aria-label="${esc(p.name)}: ${ordinal(k)} to play${k === 1 ? ' (went first)' : ' — tap if they went first'}"><span class="to-pos">${ordinal(k)}</span><span class="seat-dot sm seat-${p.seat}"></span><span class="ellipsis">${esc(p.name)}</span></button>`).join('');
       ov.querySelector('[data-role=order-hint]').textContent = chosen ? 'Tap who went first — the others follow clockwise.' : 'No first player was picked, so seat 1 is assumed. Tap who went first — the others follow clockwise.';
-      solEl.innerHTML = byPos.map(({ p }) => `<button class="sol-chip ${p.solRing ? 'on' : ''}" data-sol="${p.id}" aria-pressed="${!!p.solRing}">${I.solring}<span class="ellipsis">${esc(p.name)}</span></button>`).join('');
+      solEl.innerHTML = byPos.map(({ p }) => `<button class="sol-chip ${p.solRing ? 'on' : ''}" data-sol="${p.id}" aria-pressed="${!!p.solRing}" aria-label="${esc(p.name)}: turn 1 Sol Ring">${I.solring}<span class="seat-dot sm seat-${p.seat}"></span><span class="ellipsis">${esc(p.name)}</span></button>`).join('');
     };
     orderEl.addEventListener('click', (e) => {
       const b = e.target.closest('[data-first]'); if (!b) return;
@@ -721,7 +765,10 @@
     const g = G(); const winner = winnerId ? P(winnerId) : null;
     const pos = turnPositions(g.players.length, first);
     const rest = g.players.filter((p) => p !== winner);
-    const ranking = [...(winner ? [winner] : []), ...rest.filter((p) => !p.eliminated), ...rest.filter((p) => p.eliminated).sort((a, b) => b.elimOrder - a.elimOrder)];
+    const alive = rest.filter((p) => !p.eliminated); const out = rest.filter((p) => p.eliminated).sort((a, b) => b.elimOrder - a.elimOrder);
+    const placeOf = new Map(); if (winner) placeOf.set(winner, 1);
+    alive.forEach((p) => placeOf.set(p, winner ? 2 : 1)); // tied: nobody knocked them out
+    out.forEach((p, i) => placeOf.set(p, (winner ? 1 : 0) + alive.length + 1 + i));
     const idxOf = (pid) => g.players.findIndex((x) => x.id === pid);
     const rec = {
       id: g.id, startedAt: g.startedAt, endedAt: Date.now(), durationMs: mins * 60000, turns, startingLife: g.startingLife,
@@ -730,7 +777,7 @@
         name: p.name, commanderId: p.commanderId, commanderName: p.commanderName, partnerName: p.partnerName, colors: p.colors, seat: p.seat,
         finalLife: p.life, poison: p.poison, maxCmdTaken: Math.max(0, ...Object.values(p.cmd)), casts: p.tax[0] + p.tax[1],
         eliminated: p.eliminated, elimOrder: p.elimOrder, elimReason: p.elimReason,
-        killedBy: p.killedBy ? idxOf(p.killedBy) : null, isWinner: p === winner, wentFirst: pos[i] === 1, place: ranking.indexOf(p) + 1,
+        killedBy: p.killedBy ? idxOf(p.killedBy) : null, isWinner: p === winner, wentFirst: pos[i] === 1, place: placeOf.get(p),
         turnPos: pos[i], solRingT1: !!p.solRing, // v1.5
         ...(g.groupId ? { kind: p.kind, userId: p.userId || null, guestId: p.guestId || null, deckId: p.deckId || null } : {}),
       })),
@@ -802,7 +849,7 @@
     v.innerHTML = `<header class="page-head"><div><div class="eyebrow">${data.commanders.length} deck${data.commanders.length === 1 ? '' : 's'}</div><h1>Commanders</h1></div><button class="btn primary sm" data-act="newCmd">+ Add</button></header>
       ${list.length ? `<div class="seg small-seg">${[['games', 'Most played'], ['winrate', 'Win rate'], ['recent', 'Recent'], ['name', 'A–Z']].map(([k, l]) => `<button data-act="cmdSort" data-v="${k}" class="${cmdSort === k ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''}
       ${list.length ? list.map(({ c, s }) => `<button class="cmd-card" data-act="editCmd" data-id="${c.id}" style="--deck:${manaGrad(c.colors)}">
-          <div class="cc-top"><span class="pips lg">${pips(c.colors)}</span><div class="cc-name"><b>${esc(c.name)}</b>${c.partner ? `<small>+ ${esc(c.partner)}</small>` : ''}${c.owner ? `<small class="owner">${esc(c.owner)}</small>` : ''}</div>
+          <div class="cc-top"><div class="cc-name"><b>${esc(c.name)}</b>${c.partner ? `<small>+ ${esc(c.partner)}</small>` : ''}<span class="cc-meta"><span class="pips" aria-label="${colorWords(c.colors)}" role="img">${pips(c.colors)}</span>${c.owner ? `<small class="owner">${esc(c.owner)}</small>` : ''}</span></div>
           ${wrRing(s)}</div>
           <div class="cc-stats"><span><b>${s.games}</b> game${s.games === 1 ? '' : 's'}</span><span><b>${s.wins}</b> win${s.wins === 1 ? '' : 's'}</span><span><b>${s.games ? fmtDur(s.dur / s.games) : '—'}</b> avg</span>${s.kills ? `<span><b>${s.kills}</b> cmdr kills</span>` : ''}<span>${s.last ? 'Last ' + fmtShort(s.last) : 'Never played'}</span></div>
         </button>`).join('') : `<div class="empty"><div class="empty-ico">${I.shield}</div><p>No commanders yet.</p><p class="muted small">Add your decks here, or create them when setting up a game.</p><button class="btn primary" data-act="newCmd">Add your first commander</button></div>`}`;
@@ -817,7 +864,8 @@
     const games = meMode ? allGames().filter((g) => g.players.some((p) => p.userId === myId)) : allGames();
     const countP = (p) => !meMode || p.userId === myId;
     if (!games.length) {
-      v.innerHTML = `${statsHead()}<div class="empty"><div class="empty-ico">${I.chart}</div><p>No games recorded yet.</p><p class="muted small">Finish a game with “End game & save” to see stats here.</p></div>`;
+      v.innerHTML = groupLoading() ? `${statsHead()}${skeleton('stats')}`
+        : `${statsHead()}<div class="empty"><div class="empty-ico">${I.chart}</div><p>No games recorded yet.</p><p class="muted small">Finish a game with “End game & save” to see stats here.</p><button class="btn primary" data-act="goPlay">${I.play}Start a game</button></div>`;
       return;
     }
     const n = games.length;
@@ -881,29 +929,30 @@
         ${meMode ? `<div class="tile t-gold"><i class="t-ico">${I.trophy}</i><b>${pct(myWins, myGames)}</b><span>your win rate (${myWins}/${myGames})</span></div>` : `<div class="tile t-gold"><i class="t-ico">${I.first}</i><b>${firstGames ? pct(firstWins, firstGames) : '—'}</b><span>first-player win rate</span></div>`}
       </div>
       <div class="card-flow">
-      <section class="card"><div class="card-title">Highlights</div>
+      <section class="card"><div class="card-title"><span><span class="ct-ico gold">${I.trophy}</span>Highlights</span></div>
         ${most ? `<div class="hl-row"><span class="muted">Most played</span><span class="hl-v"><span class="pips">${pips(most.colors)}</span> ${esc(most.label)} <small>${most.g} game${most.g === 1 ? '' : 's'}</small></span></div>` : ''}
         ${best ? `<div class="hl-row"><span class="muted">Best win rate${minG > 1 ? ' (3+ games)' : ''}</span><span class="hl-v"><span class="pips">${pips(best.colors)}</span> ${esc(best.label)} <small>${pct(best.w, best.g)}</small></span></div>` : ''}
         ${fastest ? `<div class="hl-row"><span class="muted">Fastest win</span><span class="hl-v">${esc(pName(winnerOf(fastest)))} <small>turn ${fastest.turns} · ${fmtShort(fastest.endedAt)}</small></span></div>` : ''}
         <div class="hl-row"><span class="muted">Longest game</span><span class="hl-v">${fmtDur(longest.durationMs)} <small>${fmtShort(longest.endedAt)}</small></span></div>
         <div class="hl-row"><span class="muted">Shortest game</span><span class="hl-v">${fmtDur(shortest.durationMs)} <small>${fmtShort(shortest.endedAt)}</small></span></div>
       </section>
-      <section class="card"><div class="card-title">Players${meMode ? ' <span class="muted small">in games with you</span>' : ''}</div>
+      <section class="card"><div class="card-title"><span><span class="ct-ico cyan">${I.users}</span>Players</span>${meMode ? '<span class="muted small">in games with you</span>' : ''}</div>
         <div class="ptable"><div class="pt-head"><span>Player</span><span>G</span><span>W</span><span>Win%</span><span>Avg pl.</span></div>
         ${players.map((p) => { const fav = [...p.cmds.entries()].sort((a, b) => b[1] - a[1])[0]; return `<div class="pt-row ${p === topPlayer ? 'top' : ''}"><span class="pt-name"><b>${esc(p.name)}${p.guest ? ' <span class="guest-tag">Guest</span>' : ''}</b>${fav ? `<small>${esc(fav[0])}</small>` : ''}<span class="pt-bar"><i style="width:${Math.round((p.w / p.g) * 100)}%"></i></span></span><span>${p.g}</span><span>${p.w}</span><span class="acc">${pct(p.w, p.g)}</span><span>${(p.placeSum / p.g).toFixed(1)}</span></div>`; }).join('')}</div>
       </section>
       ${extra}
-      ${cmds.length ? `<section class="card"><div class="card-title">Win rate by color <span class="muted small">baseline ≈ ${Math.round(100 / avgP)}%</span></div>
+      ${cmds.length ? `<section class="card"><div class="card-title"><span><span class="ct-ico">${I.palette}</span>Win rate by color</span></div>
         ${WUBRG.concat('C').map((c) => bar(COLOR_NAME[c], `<span class="pip pip-${c}"></span>`, colorStats[c], `mana pip-${c}`)).join('')}
         ${baseNote}
       </section>
-      <section class="card"><div class="card-title">Win rate by number of colors</div>
+      <section class="card"><div class="card-title"><span><span class="ct-ico">${I.chart}</span>Win rate by number of colors</span></div>
         ${['Colorless', 'Mono', 'Two-color', 'Three-color', 'Four-color', 'Five-color'].map((l, i) => (countStats[i].g ? bar(l, `<span class="cnt-pips">${i ? '<i></i>'.repeat(i) : '<i class="o"></i>'}</span>`, countStats[i]) : '')).join('')}
+        ${baseNote}
       </section>
-      <section class="card"><div class="card-title">${meMode ? 'My decks' : 'Commanders'}</div>
+      <section class="card"><div class="card-title"><span><span class="ct-ico">${I.shield}</span>${meMode ? 'My decks' : 'Commanders'}</span></div>
         ${cmds.sort((a, b) => b.g - a.g || b.w - a.w).map((c) => sbar(esc(c.label), `<span class="pips">${pips(c.colors)}</span>`, c, manaGrad(c.colors, '90deg'))).join('')}
       </section>` : ''}
-      ${reasonTotal ? `<section class="card"><div class="card-title">How players were eliminated</div>
+      ${reasonTotal ? `<section class="card"><div class="card-title"><span><span class="ct-ico rose">${I.skull}</span>How players were eliminated</span></div>
         ${Object.entries(reasons).filter(([, c]) => c).map(([r, c]) => `<div class="bar-row"><span class="bar-label">${REASON[r][0].toUpperCase() + REASON[r].slice(1)}</span><div class="bar alt"><i style="width:${Math.round((c / reasonTotal) * 100)}%"></i></div><span class="bar-val">${c}</span></div>`).join('')}
       </section>` : ''}
       </div>`;
@@ -912,7 +961,7 @@
   function turnStatsHtml(games, countP, meMode) {
     const posGames = games.filter(hasTurnPos); const solGames = games.filter(hasSolRing);
     if (!posGames.length && !solGames.length) {
-      return `<section class="card new-card"><div class="card-title"><span class="ct-ico">${I.play}</span>Turn order & Sol Ring</div>
+      return `<section class="card new-card"><div class="card-title"><span><span class="ct-ico">${I.play}</span>Turn order &amp; Sol Ring</span></div>
         <p class="muted small">On the End game screen, pick who went first and tick any turn-1 Sol Rings. Win rate by turn position and Sol Ring stats show up here from your next saved game. Games saved before this update aren’t counted.</p></section>`;
     }
     const cmdKey = (p) => { const label = p.partnerName ? `${p.commanderName} + ${p.partnerName}` : p.commanderName; return p.commanderId || 'name:' + label.toLowerCase(); };
@@ -951,7 +1000,7 @@
         <div class="bar-note">fair share ≈ ${base}%${size === 'all' ? ` (1 in ${avg.toFixed(1)} players)` : ''}</div>
         ${list.length ? `${bySeg('posBy', posBy)}<div class="xtable pos-t" style="--cols:${maxPos}" role="table" aria-label="Win rate by turn position, ${useCmd ? 'per commander' : 'per player'}">
           <div class="xt-head" role="row"><span role="columnheader">${useCmd ? (meMode ? 'My decks' : 'Commander') : 'Player'}</span>${all.map((_, i) => `<span role="columnheader">${ordinal(i + 1)}</span>`).join('')}</div>
-          ${list.map((e) => `<div class="xt-row" role="row">${nameCell(e)}${e.pos.map((x) => (x.g ? `<span class="xt-cell" style="--h:${rate(x) / 100}" role="cell" aria-label="${pct(x.w, x.g)}, ${x.w} of ${x.g}"><b>${pct(x.w, x.g)}</b><small>${x.w}/${x.g}</small></span>` : '<span class="xt-cell none" role="cell">·</span>')).join('')}</div>`).join('')}
+          ${list.map((e) => `<div class="xt-row" role="row">${nameCell(e)}${e.pos.map((x) => (x.g ? `<span class="xt-cell" style="--h:${rate(x) / 100}" role="cell" aria-label="${pct(x.w, x.g)}, ${x.w} of ${x.g}"><b>${pct(x.w, x.g)}</b><small>${x.w}/${x.g}</small></span>` : '<span class="xt-cell none" role="cell" aria-label="no games">–</span>')).join('')}</div>`).join('')}
         </div>` : ''}
         ${note(posGames.length)}
       </section>`;
@@ -986,17 +1035,18 @@
         <div class="bar-note">fair share ≈ ${base}% (1 in ${avg.toFixed(1)} players)</div>
         ${list.length ? `${bySeg('solBy', solBy)}<div class="xtable sol-t" role="table" aria-label="Turn 1 Sol Ring ${useCmd ? 'per commander' : 'per player'}">
           <div class="xt-head" role="row"><span role="columnheader">${useCmd ? (meMode ? 'My decks' : 'Commander') : 'Player'}</span><span role="columnheader">T1 Sol</span><span role="columnheader">Win% with</span><span role="columnheader">without</span></div>
-          ${list.map((e) => `<div class="xt-row" role="row">${nameCell(e)}<span class="xt-cell plain" role="cell"><b>${e.sr.g}</b><small>of ${e.g}</small></span><span class="xt-cell" style="--h:${rate(e.sr) / 100}" role="cell"><b>${pct(e.sr.w, e.sr.g)}</b><small>${e.sr.w}/${e.sr.g}</small></span><span class="xt-cell${e.no.g ? '' : ' none'}" style="--h:${rate(e.no) / 100}" role="cell">${e.no.g ? `<b>${pct(e.no.w, e.no.g)}</b><small>${e.no.w}/${e.no.g}</small>` : '·'}</span></div>`).join('')}
+          ${list.map((e) => `<div class="xt-row" role="row">${nameCell(e)}<span class="xt-cell plain" role="cell"><b>${e.sr.g}</b><small>of ${e.g}</small></span><span class="xt-cell" style="--h:${rate(e.sr) / 100}" role="cell"><b>${pct(e.sr.w, e.sr.g)}</b><small>${e.sr.w}/${e.sr.g}</small></span><span class="xt-cell${e.no.g ? '' : ' none'}" style="--h:${rate(e.no) / 100}" role="cell">${e.no.g ? `<b>${pct(e.no.w, e.no.g)}</b><small>${e.no.w}/${e.no.g}</small>` : '–'}</span></div>`).join('')}
         </div>` : ''}` : `<p class="muted small">No turn-1 Sol Rings recorded yet.</p>`}
         ${note(solGames.length)}
       </section>`;
     }
     return html;
   }
+  let histLimit = 50; // History renders in batches ("Show more") so thousands of games stay fast
   function renderHistory(v) {
-    const games = allGames(); const myId = me() ? me().id : null;
+    const all = allGames(); const games = all.slice(0, histLimit); const more = all.length - games.length; const myId = me() ? me().id : null;
     const recName = (g) => { const m = memberById(g.recordedBy); return m ? m.display_name : ''; };
-    v.innerHTML = `<header class="page-head"><div><div class="eyebrow">${gm() ? esc(cloud.group().name) + ' · ' : ''}${games.length} game${games.length === 1 ? '' : 's'}</div><h1>History</h1></div>${gm() ? syncPill() : ''}</header>
+    v.innerHTML = `<header class="page-head"><div><div class="eyebrow">${gm() ? esc(cloud.group().name) + ' · ' : ''}${all.length} game${all.length === 1 ? '' : 's'}</div><h1>History</h1></div>${gm() ? syncPill() : ''}</header>
       ${games.length ? games.map((g) => {
         const ps = g.players.slice().sort((a, b) => (a.place || 99) - (b.place || 99));
         const w = g.winnerIndex != null ? g.players[g.winnerIndex] : null;
@@ -1005,7 +1055,13 @@
           ${!gm() || g.recordedBy === myId ? `<button class="icon-btn danger" data-act="deleteGame" data-id="${g.id}" aria-label="Delete game">${I.trash}</button>` : ''}</div>
           <div class="gc-winner ${w ? '' : 'draw'}">${w ? `${I.trophy}<b>${esc(pName(w))}</b>${w.commanderName ? `<span class="ellipsis muted"><span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}</span>` : ''}` : `${I.flag}<b>Draw</b>`}</div>
           <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis">${p.seat != null ? `<span class="seat-dot sm seat-${p.seat % 6}"></span>` : ''}<b>${esc(pName(p))}</b>${gm() && !p.userId ? ' <span class="guest-tag">Guest</span>' : ''} ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="gc-tail muted small nowrap">${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${Number.isInteger(p.turnPos) ? `<span class="tp-badge" role="img" aria-label="${ordinal(p.turnPos)} to play" title="${ordinal(p.turnPos)} to play">${I.play}${p.turnPos}</span>` : p.wentFirst ? ' · went 1st' : ''}${p.solRingT1 ? `<span class="sr-badge" role="img" aria-label="Turn 1 Sol Ring" title="Turn 1 Sol Ring">${I.solring}</span>` : ''}</span></div>`).join('')}</div></div>`;
-      }).join('') : `<div class="empty"><div class="empty-ico">${I.history}</div><p>No games yet.</p><p class="muted small">Saved games appear here. You can delete a wrong entry anytime.</p></div>`}`;
+      }).join('') : groupLoading() ? skeleton('history') : `<div class="empty"><div class="empty-ico">${I.history}</div><p>No games yet.</p><p class="muted small">Saved games appear here. You can delete a wrong entry anytime.</p><button class="btn primary" data-act="goPlay">${I.play}Start a game</button></div>`}
+      ${more > 0 ? `<button class="btn ghost block more-hist" data-act="moreHistory">Show more <span class="muted">· ${more} older game${more === 1 ? '' : 's'}</span></button>` : ''}`;
+  }
+  function skeleton(kind) {
+    const bar = (w) => `<i class="sk-line" style="width:${w}%"></i>`;
+    const card = (n) => `<div class="card sk-card">${bar(38)}${Array.from({ length: n }, (_, i) => bar(90 - i * 14)).join('')}</div>`;
+    return `<div class="skeleton" aria-busy="true" aria-live="polite"><span class="sr-only">Loading group games…</span>${kind === 'stats' ? `<div class="tiles">${'<div class="tile sk-tile"></div>'.repeat(6)}</div>${card(4)}${card(3)}` : card(4) + card(4) + card(3)}</div>`;
   }
 
   // ---------- settings / backup ----------
@@ -1051,14 +1107,19 @@
     const mode = await choiceDialog(`Backup contains <b>${obj.commanders.length}</b> commanders and <b>${obj.games.length}</b> games.`,
       [{ label: 'Merge with current data', value: 'merge', cls: 'primary' }, { label: 'Replace everything', value: 'replace', cls: 'danger' }]);
     if (!mode) return;
-    const inc = normalize(obj);
+    const inc = normalize(obj); const prev = data;
     if (mode === 'replace') { data = inc; }
     else {
-      const cids = new Set(data.commanders.map((c) => c.id)); inc.commanders.forEach((c) => { if (!cids.has(c.id)) data.commanders.push(c); });
-      const gids = new Set(data.games.map((g) => g.id)); inc.games.forEach((g) => { if (!gids.has(g.id)) data.games.push(g); });
-      data.games.sort((a, b) => b.endedAt - a.endedAt);
+      const cids = new Set(data.commanders.map((c) => c.id)); const gids = new Set(data.games.map((g) => g.id));
+      data = { ...data, commanders: data.commanders.concat(inc.commanders.filter((c) => !cids.has(c.id))), games: data.games.concat(inc.games.filter((g) => !gids.has(g.id))).sort((a, b) => b.endedAt - a.endedAt) };
     }
-    save(true); renderTab(); toast(mode === 'replace' ? 'Data replaced from backup' : 'Backup merged');
+    clearTimeout(saveTimer);
+    if (!persist()) {
+      const mb = (JSON.stringify(data).length / 1048576).toFixed(1); data = prev;
+      await alertDialog(`<b>This backup is too big to store on this device</b> (${mb} MB; browsers keep about 5 MB per app). Nothing was changed.`);
+      return;
+    }
+    renderTab(); toast(mode === 'replace' ? 'Data replaced from backup' : 'Backup merged');
   }
 
   // ---------- wake lock ----------
@@ -1076,6 +1137,7 @@
   const cd = () => cloud.data();
   const PROFILE_COLORS = ['#ff6b61', '#ffbe4d', '#4fd08a', '#3fd6d0', '#5ea8ff', '#8b6cff', '#e06bb0', '#c9ced9'];
   function allGames() { return gm() ? cd().games : data.games; }
+  const groupLoading = () => gm() && !cd().fetchedAt && !cloud.offline(); // joined, first download still running
   function memberById(id) { return gm() && id ? cd().members.find((m) => m.id === id) || null : null; }
   function deckById(id) { return gm() && id ? cd().decks.find((d) => d.id === id) || null : null; }
   // commander info by id: group deck (online) or local commander
@@ -1454,7 +1516,7 @@
     <section class="card">
       <div class="field"><label>Players</label><div class="seg">${[2, 3, 4, 5, 6].map((n) => `<button data-act="setCount" data-v="${n}" class="${s.count === n ? 'on' : ''}">${n}</button>`).join('')}</div></div>
       <div class="field"><label>Starting life</label><div class="seg" id="life-seg">${LIFE_PRESETS.map((n) => `<button data-act="setLife" data-v="${n}" class="${s.life === n ? 'on' : ''}">${n}</button>`).join('')}
-        <input class="seg-input ${LIFE_PRESETS.includes(s.life) ? '' : 'on'}" type="number" inputmode="numeric" min="1" max="999" placeholder="Other" value="${LIFE_PRESETS.includes(s.life) ? '' : s.life}" data-bind="customLife"></div></div>
+        <input class="seg-input ${LIFE_PRESETS.includes(s.life) ? '' : 'on'}" type="number" inputmode="numeric" min="1" max="999" placeholder="Other" aria-label="Other starting life" value="${LIFE_PRESETS.includes(s.life) ? '' : s.life}" data-bind="customLife"></div></div>
       <label class="switch-row"><span>Random first player</span><input type="checkbox" data-bind="randomFirst" ${data.settings.randomFirst ? 'checked' : ''}><i class="switch"></i></label>
     </section>
     <section class="card">
@@ -1479,7 +1541,7 @@
         <div class="sec-title">Group members</div>
         <div class="pick-list">${cd().members.map((m) => `<button class="pick-row ${seats[i].userId === m.id ? 'on' : ''}" data-member="${m.id}" ${taken.has(m.id) ? 'disabled' : ''}>${dot(m.color, 'lg')}<span class="pr-main"><b>${esc(m.display_name)}${m.id === u.id ? ' (you)' : ''}</b><small>${cd().decks.filter((d) => d.owner_id === m.id).length} decks${taken.has(m.id) ? ' · already seated' : ''}</small></span></button>`).join('')}</div>
         <div class="sec-title">Guests <span class="muted">(people without the app)</span></div>
-        <div class="guest-new"><input type="text" data-role="gname" placeholder="New guest name" maxlength="24" autocapitalize="words" autocomplete="off"><button class="btn primary" data-role="gadd">Add</button></div>
+        <div class="guest-new"><input type="text" data-role="gname" placeholder="New guest name" aria-label="New guest name" maxlength="24" autocapitalize="words" autocomplete="off"><button class="btn primary" data-role="gadd">Add</button></div>
         <div class="chip-list">${guests.map((g) => `<button class="gchip ${seats[i].kind === 'guest' && seats[i].name.toLowerCase() === g.name.toLowerCase() ? 'on' : ''}" data-guest="${esc(g.name)}">${esc(g.name)}</button>`).join('') || '<span class="muted small">Guests you add are remembered for next time.</span>'}</div>
         ${seats[i].kind ? '<button class="btn ghost block" data-role="clear">Clear seat</button>' : ''}
       </div>`, { cls: 'tall' });
@@ -1529,7 +1591,7 @@
     const theirs = guestCommanders(seat.name); const all = allKnownCommanders();
     let q = '';
     const ov = openSheet(`<div class="sheet-head"><h2>${esc(seat.name)}'s commander</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
-      <div class="sheet-body"><input type="search" class="search" data-role="q" placeholder="Search or type a commander" autocomplete="off" autocapitalize="words">
+      <div class="sheet-body"><input type="search" class="search" data-role="q" placeholder="Search or type a commander" aria-label="Search or type a commander" autocomplete="off" autocapitalize="words">
       <div class="pick-list" data-role="list"></div></div>`, { cls: 'tall' });
     const list = ov.querySelector('[data-role=list]');
     const row = (c, tag) => `<button class="pick-row" data-c="${esc(JSON.stringify(c))}"><span class="pips">${pips(c.colors)}</span><span class="pr-main"><b>${esc(c.partner ? `${c.name} + ${c.partner}` : c.name)}</b>${tag ? `<small>${tag}</small>` : ''}</span></button>`;
@@ -1589,7 +1651,7 @@
   function renderDecks(v) {
     const u = me(); const stats = commanderStats(); const empty = { games: 0, wins: 0, dur: 0, last: 0, kills: 0 };
     const card = (d, editable) => { const s = stats.get(d.id) || empty; return `<button class="cmd-card" ${editable ? `data-act="editDeck" data-id="${d.id}"` : 'disabled'} style="--deck:${manaGrad(d.colors)}">
-      <div class="cc-top"><span class="pips lg">${pips(d.colors)}</span><div class="cc-name"><b>${esc(d.commander)}</b>${d.partner ? `<small>+ ${esc(d.partner)}</small>` : ''}${d.name ? `<small class="owner">${esc(d.name)}</small>` : ''}</div>
+      <div class="cc-top"><div class="cc-name"><b>${esc(d.commander)}</b>${d.partner ? `<small>+ ${esc(d.partner)}</small>` : ''}<span class="cc-meta"><span class="pips" aria-label="${colorWords(d.colors)}" role="img">${pips(d.colors)}</span>${d.name ? `<small class="owner">${esc(d.name)}</small>` : ''}</span></div>
       ${wrRing(s)}</div>
       <div class="cc-stats"><span><b>${s.games}</b> game${s.games === 1 ? '' : 's'}</span><span><b>${s.wins}</b> win${s.wins === 1 ? '' : 's'}</span><span><b>${s.games ? fmtDur(s.dur / s.games) : '—'}</b> avg</span>${s.kills ? `<span><b>${s.kills}</b> cmdr kills</span>` : ''}<span>${s.last ? 'Last ' + fmtShort(s.last) : 'Never played'}</span></div></button>`; };
     const decks = cd().decks; const myDecks = decks.filter((d) => d.owner_id === u.id);
@@ -1672,6 +1734,8 @@
       try { await cloud.setPassword(pw); toast('Password saved — sign in with your Google email + password'); } catch (e) { toast(e.message); }
     },
     goSettings: () => setTab('settings'),
+    goPlay: () => setTab('play'),
+    moreHistory: () => { histLimit += 50; renderTab(); },
     editProfile: () => editProfile(),
     statsScope: (el) => { statsScope = el.dataset.v; renderTab(); },
     posSize: (el) => { posSize = el.dataset.v === 'all' ? 'all' : +el.dataset.v; renderTab(); },
@@ -1722,7 +1786,7 @@
       data = defaults(); save(true); renderTab(); toast('All data deleted');
     },
     playerSheet: (el) => { const panel = el.closest('.panel'); if (panel) openPlayerSheet(panel.dataset.pid); },
-    gameMenu: () => openGameMenu(),
+    gameMenu: () => { dismissTapHint(); openGameMenu(); },
     displayInfo: () => openDisplayInfo(),
   };
   document.addEventListener('click', (e) => {
@@ -1835,13 +1899,13 @@
   });
   else if (pendingJoinCode()) toast('Connect to the internet to join the playgroup');
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    // Fallback when the SW can't navigate this window itself: reload once, after any open dialog closes.
-    navigator.serviceWorker.addEventListener('message', (e) => {
-      if (!e.data || e.data.type !== 'sw-updated') return;
-      save(true);
-      const go = () => { if ($('.overlay')) setTimeout(go, 1500); else location.reload(); };
-      go();
-    });
+    // Upgrade: the new worker navigates open windows itself; when it can't (Safari may not, or not in time), the page
+    // reloads once when the new worker takes control, after any open dialog closes. Game state is saved first.
+    let reloading = false;
+    const reloadForUpdate = () => { if (reloading) return; reloading = true; save(true); const go = () => { if ($('.overlay')) setTimeout(go, 1500); else location.reload(); }; go(); };
+    navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'sw-updated') reloadForUpdate(); });
+    const hadController = !!navigator.serviceWorker.controller; // no controller yet = first install, nothing stale on screen
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) reloadForUpdate(); });
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then((reg) => {
       document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
     }).catch((e) => console.warn('SW registration failed', e)));

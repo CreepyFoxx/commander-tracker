@@ -1,5 +1,5 @@
 /* Commander Tracker service worker: offline app shell, stale-while-revalidate. */
-const CACHE = 'edh-tracker-v1.5.2';
+const CACHE = 'edh-tracker-v1.6.0';
 const ASSETS = [
   './', 'index.html', 'styles.css', 'app.js', 'cloud.js', 'manifest.json',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'
@@ -30,7 +30,8 @@ self.addEventListener('activate', (e) => {
     // Upgrade: reload open windows once so they run the new version (game state is persisted in localStorage).
     const wins = await self.clients.matchAll({ type: 'window' });
     for (const c of wins) {
-      try { if ('navigate' in c) { await c.navigate(c.url); continue; } } catch (err) { /* fall through */ }
+      // navigate() can be missing, reject, or never settle (seen in WebKit): don't wait on it for more than 3 s
+      try { if ('navigate' in c && await Promise.race([c.navigate(c.url).then(() => true), new Promise((r) => setTimeout(() => r(false), 3000))])) continue; } catch (err) { /* fall through */ }
       c.postMessage({ type: 'sw-updated' });
     }
   })());

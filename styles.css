@@ -464,7 +464,7 @@ div.empty > p:first-of-type { font-size: 18px; font-weight: 700; color: var(--te
 .foot-note { margin: 18px 10px; }
 
 #toast {
-  position: fixed; left: 50%; bottom: calc(var(--sab) + 100px); transform: translate(-50%, 20px); z-index: 100; max-width: 86vw;
+  position: fixed; left: 50%; bottom: calc(var(--sab) + 100px); transform: translate(-50%, 20px); z-index: 100; width: max-content; max-width: min(86vw, 420px); line-height: 1.35;
   background: rgba(34, 28, 62, .88); backdrop-filter: blur(16px) saturate(1.5); -webkit-backdrop-filter: blur(16px) saturate(1.5); border: 1px solid var(--line2);
   padding: 11px 18px; border-radius: 16px; font-weight: 650; font-size: 14px;
   box-shadow: 0 16px 40px -10px rgba(0, 0, 0, .7); opacity: 0; pointer-events: none; transition: opacity .2s, transform .25s var(--ease); text-align: center;
@@ -480,6 +480,8 @@ body.in-game #toast.show { transform: translate(-50%, 44px); }
 .near-bl .p-foot { padding-left: 42px; }
 .near-br .p-foot { padding-right: 42px; }
 .near-tc .p-head { right: calc(50% + 38px); }
+/* v1.6: the commander line drops below the centre button's reach and uses the panel's full width (was squeezed to nothing on 5-6 player phones) */
+.near-tc .p-cmd { margin-top: 6px; width: calc(100cqw - 66px - var(--pl, 0px) - var(--pr, 0px)); }
 .near-bc .chips { max-width: calc(50% - 44px); }
 
 /* end-game turns question */
@@ -712,3 +714,85 @@ body.login-open { overflow: hidden; }
 }
 @media (max-height: 560px) and (max-width: 767px) { .login-logo { width: 56px; height: 56px; border-radius: 14px; } .login-brand h1 { font-size: 26px; margin-top: 10px; } }
 @media (min-width: 768px) { #tabbar { justify-content: center; } #tabbar button { max-width: 150px; } }
+
+/* ---------- v1.6 polish pass ---------- */
+/* one press language: everything tappable dips slightly */
+.seg button:active, .to-chip:active, .sol-chip:active, .win-row:active, .tbtn:active, .gchip:active, .pick-row:active, .ctog:active, .swatch:active, .chip:is(button):active { transform: scale(.97); }
+.swatch.on:active { transform: scale(1.02); }
+.seg button, .win-row, .tbtn, .pick-row, .chip { transition: transform var(--t-fast), background var(--t-med) var(--ease), color var(--t-med) var(--ease), border-color var(--t-med), box-shadow var(--t-med); }
+#tabbar button:active svg { transform: scale(.9); }
+#tabbar button svg { transition: transform var(--t-fast); }
+button.chip { color: inherit; font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.chip.poison { color: #9dff9d; } button.chip.tax { color: #9ff3ea; } button.chip.sol { color: var(--sol); } button.chip.lethal { color: #fff; }
+.chip:is(button):focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+/* life-change pill pops in instead of just fading */
+.p-delta { transform: translateY(-50%) scale(.8); transition: opacity .25s, transform .22s var(--ease); }
+.p-delta.show { transform: translateY(-50%) scale(1); }
+/* sheets take focus for screen readers; no focus ring on the sheet box itself */
+.sheet:focus { outline: none; }
+/* card titles: icon + text grouped, extras on the right */
+.card-title > span:first-child { display: inline-flex; align-items: center; min-width: 0; }
+.card-title .ct-ico { vertical-align: 0; flex: none; }
+.ct-ico.gold { color: var(--gold); background: rgba(246, 200, 95, .15); }
+.ct-ico.cyan { color: var(--cyan); background: rgba(79, 227, 214, .14); }
+.ct-ico.rose { color: #ff9aaa; background: rgba(255, 102, 128, .14); }
+.ct-ico circle { fill: currentColor; stroke: none; }
+/* commander & deck cards: names share one left edge, colours sit on the meta line under the name */
+.cc-meta { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 3px; }
+.cc-meta .pips .pip { width: 12px; height: 12px; }
+.cc-meta small { min-width: 0; }
+/* end-game Sol Ring chips carry the seat colour like the turn-order chips */
+.sol-chip .seat-dot.sm { width: 10px; height: 10px; flex: none; }
+/* player sheet: three toggles stack icon over label so none of them wrap awkwardly */
+.toggle-row.three .tbtn { flex-direction: column; gap: 4px; min-height: 60px; padding: 8px 4px; text-align: center; font-size: 13px; }
+.toggle-row.three .tbtn svg { width: 19px; height: 19px; }
+/* empty states lead somewhere */
+div.empty .btn { margin-top: 6px; }
+/* History: "Show more" */
+.more-hist { grid-column: 1 / -1; margin: 4px 0 12px; }
+/* group loading skeleton */
+.skeleton { grid-column: 1 / -1; }
+.sk-card { display: grid; gap: 10px; padding: 16px; }
+.sk-line { display: block; height: 12px; border-radius: 6px; }
+.sk-line:first-child { height: 16px; margin-bottom: 4px; }
+.sk-tile { min-height: 86px; }
+.sk-line, .sk-tile { background: linear-gradient(90deg, rgba(255, 255, 255, .05) 0%, rgba(255, 255, 255, .11) 40%, rgba(255, 255, 255, .05) 80%) 0 0 / 300% 100%; animation: sk-shimmer 1.4s ease-in-out infinite; }
+@keyframes sk-shimmer { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+/* first-game hint: sits over each panel in that player's own orientation; never blocks taps */
+.tap-hint { position: absolute; inset: 0; z-index: 4; pointer-events: none; display: grid; grid-template-rows: 1fr auto 1fr; justify-items: center;
+  padding: calc(var(--pt, 0px) + 6px) calc(var(--pr, 0px) + 10px) calc(var(--pb, 0px) + 6px) calc(var(--pl, 0px) + 10px);
+  background: linear-gradient(180deg, rgba(67, 214, 140, .14), transparent 42% 58%, rgba(255, 102, 128, .14)), rgba(7, 6, 15, .8); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: th-in .35s var(--ease) both; transition: opacity .35s; }
+.tap-hint.out { opacity: 0; }
+.p-center { transition: opacity .3s; } .panel:has(> .tap-hint:not(.out)) .p-center { opacity: 0; }
+@keyframes th-in { from { opacity: 0; } }
+.th-row { display: flex; align-items: center; gap: 6px; font-size: clamp(13px, 9cqh, 19px); font-weight: 700; color: #fff; font-family: var(--font-num); }
+.th-row b { font-family: var(--font); font-weight: 650; color: rgba(255, 255, 255, .78); }
+.th-plus, .th-minus { align-self: center; }
+.th-row i { display: grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 50%; background: rgba(255, 255, 255, .14); }
+.th-row svg { width: 70%; height: 70%; stroke-width: 2.6; }
+.th-plus i { color: #6ff0a8; } .th-minus i { color: #ff9aaa; }
+.th-mid { position: relative; display: flex; align-items: center; gap: 6px; font-size: clamp(11px, 6.5cqh, 14px); font-weight: 650; color: var(--accent-text); padding: 3px 12px; border-radius: 999px; background: rgba(157, 123, 255, .18); border: 1px solid rgba(172, 152, 255, .35); }
+.th-mid i { display: grid; } .th-mid svg { width: 1.2em; height: 1.2em; stroke-width: 2; }
+.th-mid::before, .th-mid::after { content: ''; position: absolute; top: 50%; width: 30cqw; border-top: 1px dashed rgba(255, 255, 255, .25); }
+.th-mid::before { right: calc(100% + 8px); } .th-mid::after { left: calc(100% + 8px); }
+@container (max-height: 150px) { .th-row i { display: none; } }
+@media (prefers-reduced-motion: reduce) { .tap-hint, .sk-line, .sk-tile { animation: none; } .p-delta { transition: opacity .01ms; } }
+/* iPad: a larger centre button and roomier panel type (phones keep the 68px button) */
+@media (min-width: 768px) and (min-height: 700px) {
+  #center-btn { width: 80px; height: 80px; }
+  .cb-clock, .cb-time { font-size: 16px; }
+  .near-tl .p-head { padding-left: 48px; }
+  .near-tr .p-more { right: calc(50px + var(--pr, 0px)); }
+  .near-tr .p-head { right: calc(102px + var(--pr, 0px)); }
+  .near-bl .p-foot { padding-left: 50px; }
+  .near-br .p-foot { padding-right: 50px; }
+  .near-tc .p-head { right: calc(50% + 44px); }
+  .near-bc .chips { max-width: calc(50% - 50px); }
+}
+@container (min-width: 520px) and (min-height: 300px) {
+  .p-head { padding: 14px 16px 0 18px; }
+  .p-name { font-size: 22px; } .p-cmd { font-size: 15px; } .p-cmd .pip { width: 11px; height: 11px; }
+  .chip { height: 30px; font-size: 14px; padding: 0 11px 0 9px; border-radius: 15px; }
+  .chip svg { width: 15px; height: 15px; }
+  .p-foot { padding: 0 12px 12px 14px; }
+}

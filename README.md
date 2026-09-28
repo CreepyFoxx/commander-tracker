@@ -134,3 +134,30 @@ Optional. Without an account the app works exactly as before, 100% local.
 - Settings → "Slowly rotate the centre timer" (on by default) turns the rotation off; the time-of-day swap stays.
 - Tests shorten the cycle with `window.__edh.setCenterCycle(everyMs, showMs)`. `tools/shot-center.mjs` renders
   `screenshots/37-center-*.png` (full screen + zoomed crops, 4 players and 6 players on 375×667).
+
+## Polish & testing (v1.6.0)
+- Fixed: tapping a status chip (poison, commander damage, tax, Sol Ring) on iPhone Safari changed life instead of
+  opening the player sheet. The chips are real buttons now, with spoken labels. After an update, WebKit could stay on
+  the old version: the new service worker waits at most 3 s for `navigate()`, and the page also reloads itself when a
+  newer worker takes over (game state is saved first). A draw now gives every survivor 1st place (they used to be
+  ranked 1, 2, 3 by seat). A backup too big for the device used to say "Backup merged" and then vanish on reload; now
+  it says so and nothing changes. The commander name is visible on 5–6 player middle panels. Toasts stay on one line.
+  History renders 50 games at a time ("Show more"), so thousands of games stay fast. Form fields are paired with their labels.
+- Polish: a one-time hint on the first game ("Tap +1 / Hold for ±10 / Tap −1", in every seat's orientation, never
+  blocks taps; stored under its own key `edh-tracker:tapHint`, so the data format is unchanged). Sheets are modal dialogs
+  (named, focused, Escape closes, focus returns). Every tappable control has the same press dip. The life-change pill pops in.
+  Every stats card title has an icon. Commander/deck names share one left edge, with colours on the line below. End-game
+  Sol Ring chips carry the seat colour. Player-sheet toggles stack the icon above the label. Empty Stats/History pages get a
+  "Start a game" button. Group data shows a loading skeleton. On iPad the centre button and panel text are larger.
+- Tests (all run under Chromium **and** WebKit: `ENGINE=webkit node tools/<suite>.mjs`, see `tools/engine.mjs`;
+  WebKit is installed with `npx playwright-core install webkit` + `sudo npx playwright-core install-deps webkit`):
+  - `test.mjs`: the main end-to-end suite, including the v1.6 regressions.
+  - `test-games.mjs`: five scripted full games (2–6 players) ending by life, commander damage (partner), poison,
+    concede and draw, with turn order changed and Sol Rings marked. It checks the saved records, History and Stats numbers exactly.
+  - `test-stress.mjs`: 200 rapid taps, a 2-hour clock, 60 games (render time and frame gaps), a 1500-game import,
+    a too-big import, accessibility names/dialogs/Escape, reduced motion, and the update path from v1.5.2 mid-game (served from the
+    deploy repo history) plus a newer worker that can't navigate.
+  - `test-online.mjs`: two users in a group, offline play then sync, deck edit/delete, and an offline game delete that syncs later.
+- Known WebKit test limits: Playwright's WebKit offline emulation also blocks service-worker responses, so offline
+  checks there use a real server shutdown (local) or a fetch wrapper (online). WebKit can't intercept requests from pages
+  controlled by a service worker, so one online device runs with service workers blocked under WebKit.
