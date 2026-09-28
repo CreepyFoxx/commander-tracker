@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.5.1';
+  const APP_VERSION = '1.5.2';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -55,7 +55,7 @@
   function defaults() {
     return {
       version: 1, commanders: [], games: [],
-      settings: { startingLife: 40, playerCount: 4, wakeLock: true, randomFirst: true },
+      settings: { startingLife: 40, playerCount: 4, wakeLock: true, randomFirst: true, spinClock: true },
       lastSetup: null, current: null,
     };
   }
@@ -345,7 +345,7 @@
     $('#app').hidden = true; $('#game').hidden = false;
     document.body.classList.add('in-game');
     renderGame(); requestWakeLock();
-    clearInterval(clockTimer); clockTimer = setInterval(updateCenter, 1000);
+    clearInterval(clockTimer); centerStart = Date.now(); clockTimer = setInterval(updateCenter, 500);
   }
   function closeGame() {
     $('#game').hidden = true; $('#app').hidden = false; $('#game').innerHTML = '';
@@ -367,9 +367,10 @@
           <div class="p-dead"><div class="skull">${I.skull}</div><div class="p-dead-txt"></div></div>
         </div></div>`;
       }).join('')}
-      <button id="center-btn" data-act="gameMenu" aria-label="Game menu"><span class="cb-clock"></span><span class="cb-menu">${I.more}</span></button>
+      <button id="center-btn" data-act="gameMenu" aria-label="Game menu"><span class="cb-spin" aria-hidden="true"><span class="cb-face cb-timer"><span class="cb-clock"></span><span class="cb-menu">${I.more}</span></span><span class="cb-face cb-tod"><span class="cb-tod-ico">${I.clock}</span><span class="cb-time"></span></span></span></button>
     </div>`;
     const board = $('#board');
+    board.classList.toggle('no-spin', data.settings.spinClock === false);
     board.addEventListener('pointerdown', onPressStart);
     board.addEventListener('touchstart', (e) => { if (e.target.closest('[data-d]')) e.preventDefault(); }, { passive: false });
     board.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -444,9 +445,19 @@
     if (p.solRing) out.push(`<span class="chip sol" data-act="playerSheet" role="img" aria-label="Turn 1 Sol Ring">${I.solring}<span class="lbl">Sol Ring</span></span>`);
     return out.join('');
   }
+  // Centre button (v1.5.2): the game timer slowly turns (CSS animation on .cb-spin) so every seat can read it, and every
+  // CENTER.every ms it cross-fades to the time of day for CENTER.show ms. Tests shorten the cycle via __edh.setCenterCycle.
+  const CENTER = { every: 20000, show: 4000 };
+  let centerStart = Date.now();
+  const setText = (el, t) => { if (el && el.textContent !== t) el.textContent = t; };
+  const timeOfDay = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   function updateCenter() {
-    const g = G(); const b = $('#center-btn'); if (!g || !b) return;
-    b.querySelector('.cb-clock').textContent = fmtClock(Date.now() - g.startedAt);
+    const g = G(); const b = $('#center-btn'); if (!g || !b || document.hidden) return;
+    setText(b.querySelector('.cb-clock'), fmtClock(Date.now() - g.startedAt));
+    const t = (Date.now() - centerStart) % (CENTER.every + CENTER.show);
+    const tod = t >= CENTER.every;
+    if (tod) setText(b.querySelector('.cb-time'), timeOfDay());
+    b.classList.toggle('show-tod', tod);
   }
   function bumpDelta(p, d) {
     const s = deltas[p.id] || (deltas[p.id] = { v: 0, t: null });
@@ -1008,6 +1019,7 @@
         <div class="field"><label>Default players</label><div class="seg">${[2, 3, 4, 5, 6].map((n) => `<button data-act="defCount" data-v="${n}" class="${s.playerCount === n ? 'on' : ''}">${n}</button>`).join('')}</div></div>
         <label class="switch-row"><span>Keep screen awake during games${'wakeLock' in navigator ? '' : ' <small class="muted">(not supported here)</small>'}</span><input type="checkbox" data-bind="wakeLock" ${s.wakeLock ? 'checked' : ''}><i class="switch"></i></label>
         <label class="switch-row"><span>Random first player at start</span><input type="checkbox" data-bind="randomFirst" ${s.randomFirst ? 'checked' : ''}><i class="switch"></i></label>
+        <label class="switch-row"><span>Slowly rotate the centre timer <small class="muted">(so every seat can read it)</small></span><input type="checkbox" data-bind="spinClock" ${s.spinClock !== false ? 'checked' : ''}><i class="switch"></i></label>
       </section>
       <section class="card"><div class="card-title">Backup</div>
         <p class="muted small">${gm() ? 'Local (offline) data on this device — group games are stored online. ' : ''}All data is stored only on this device (${data.commanders.length} commanders, ${data.games.length} games, ${(size / 1024).toFixed(1)} KB). Export a backup regularly — e.g. save it to Files or iCloud Drive.</p>
@@ -1724,6 +1736,7 @@
       if (n > 0 && n < 1000) { getSetup().life = n; save(); $$('#life-seg button').forEach((b) => b.classList.toggle('on', +b.dataset.v === n)); el.classList.toggle('on', !LIFE_PRESETS.includes(n)); }
     },
     randomFirst: (el) => { data.settings.randomFirst = el.checked; save(); },
+    spinClock: (el) => { data.settings.spinClock = el.checked; save(); const bd = $('#board'); if (bd) bd.classList.toggle('no-spin', !el.checked); },
     wakeLock: (el) => { data.settings.wakeLock = el.checked; save(); },
     importFile: (el) => { const f = el.files && el.files[0]; el.value = ''; if (f) importFile(f); },
     groupSel: (el) => { cloud.setGroup(el.value); renderTab(); },
@@ -1833,5 +1846,6 @@
       document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
     }).catch((e) => console.warn('SW registration failed', e)));
   }
-  window.__edh = { get data() { return data; } }; // debug/test hook
+  document.addEventListener('visibilitychange', () => { document.documentElement.classList.toggle('page-hidden', document.hidden); if (!document.hidden) updateCenter(); });
+  window.__edh = { get data() { return data; }, setCenterCycle: (every, show) => { CENTER.every = every; CENTER.show = show; centerStart = Date.now(); updateCenter(); } }; // debug/test hooks
 })();

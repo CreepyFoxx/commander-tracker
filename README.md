@@ -124,3 +124,13 @@ Optional. Without an account the app works exactly as before, 100% local.
   zones have role="button" + labels and accept Enter/Space (Shift = ±10) for keyboard/switch access.
 - Tests tap by coordinates computed from each seat's rotation (`halfPoint()` in `tools/test.mjs`) for 2–6 players on
   phone and iPad. `tools/shot-zones.mjs` renders `screenshots/36-game-tap-zones*.png` (`ALL=1` adds iPad / 2p / 3p).
+
+## Centre timer (v1.5.2)
+- The game timer inside the centre ring slowly turns (one full turn every 36 s, CSS transform animation on
+  `.cb-spin`), so every seat can read it. Only the content turns; the 68 px button (tap = game menu) stays put.
+- Every 20 s it cross-fades for 4 s to the time of day (HH:MM, 24-hour, device timezone) with a small cyan clock
+  icon, then fades back to the game timer.
+- Reduced motion (OS setting): no rotation and an instant swap. The animation pauses while the page is hidden.
+- Settings → "Slowly rotate the centre timer" (on by default) turns the rotation off; the time-of-day swap stays.
+- Tests shorten the cycle with `window.__edh.setCenterCycle(everyMs, showMs)`. `tools/shot-center.mjs` renders
+  `screenshots/37-center-*.png` (full screen + zoomed crops, 4 players and 6 players on 375×667).

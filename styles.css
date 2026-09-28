@@ -354,8 +354,25 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
   display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; transition: transform var(--t-fast);
 }
 #center-btn:active { transform: translate(-50%, -50%) scale(.94); }
+/* v1.5.2: only the content turns (one turn / 36 s, compositor-only transform); the button and its tap target stay put.
+   Every ~20 s the game timer cross-fades to the time of day (clock icon + HH:MM) for ~4 s. */
+.cb-spin { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; pointer-events: none; will-change: transform; animation: cb-spin 36s linear infinite; }
+@keyframes cb-spin { to { transform: rotate(360deg); } }
+#board.no-spin .cb-spin { animation: none; }
+.page-hidden .cb-spin { animation-play-state: paused; }
+.cb-face { grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; transition: opacity .6s ease, transform .6s ease; }
+.cb-tod { opacity: 0; transform: scale(.9); }
+#center-btn.show-tod .cb-tod { opacity: 1; transform: none; }
+#center-btn.show-tod .cb-timer { opacity: 0; transform: scale(.9); }
 .cb-clock { font-weight: 800; font-size: 14px; font-family: var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: -.01em; margin-top: 4px; }
 .cb-menu svg { width: 16px; height: 16px; fill: #b3a6dd; stroke: none; }
+.cb-tod-ico { display: grid; place-items: center; color: var(--cyan); margin-bottom: 1px; }
+.cb-tod-ico svg { width: 12px; height: 12px; stroke-width: 2.4; }
+.cb-time { font-weight: 800; font-size: 14px; font-family: var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: #c8f6f1; margin-bottom: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .cb-spin { animation: none; }
+  .cb-face { transition: none; }
+}
 #board.n2 #center-btn, #board.n3 #center-btn, #board.n5 #center-btn { top: 50%; }
 
 /* ---------- lists & stats ---------- */
