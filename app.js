@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.5.0';
+  const APP_VERSION = '1.5.1';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -358,10 +358,11 @@
       ${g.players.map((p, i) => {
         const [r, c, span, rot] = L.seats[i];
         return `<div class="cell" style="grid-area:${r}/${c}/span 1/span ${span}"><div class="panel seat-${p.seat} ${Math.abs(rot) === 90 ? 'side' : ''} ${nearClass(L, r, c, span, rot)}" style="--rot:${rot}deg;${safePad(L, r, c, span, rot)}" data-pid="${p.id}" data-rot="${rot}">
-          <div class="zone plus" data-d="1"></div><div class="zone minus" data-d="-1"></div>
+          <div class="zone plus" data-d="1" role="button" tabindex="0" aria-label="${esc(p.name)}: gain 1 life (hold for 10)"><span class="z-hint l" aria-hidden="true">+</span><span class="z-hint r" aria-hidden="true">+</span></div>
+          <div class="zone minus" data-d="-1" role="button" tabindex="0" aria-label="${esc(p.name)}: lose 1 life (hold for 10)"><span class="z-hint l" aria-hidden="true">−</span><span class="z-hint r" aria-hidden="true">−</span></div>
           <div class="p-head"><div class="p-name"></div><div class="p-cmd"></div></div>
           <button class="p-more" data-act="playerSheet" aria-label="Commander damage & counters">${I.more}</button>
-          <div class="p-center"><button class="lbtn" data-d="-1" aria-label="Lose life">−</button><div class="p-life-box"><div class="p-delta"></div><div class="p-life"></div></div><button class="lbtn" data-d="1" aria-label="Gain life">+</button></div>
+          <div class="p-center"><div class="p-life-box"><div class="p-delta"></div><div class="p-life"></div></div></div>
           <div class="p-foot"><div class="chips"></div></div>
           <div class="p-dead"><div class="skull">${I.skull}</div><div class="p-dead-txt"></div></div>
         </div></div>`;
@@ -372,6 +373,10 @@
     board.addEventListener('pointerdown', onPressStart);
     board.addEventListener('touchstart', (e) => { if (e.target.closest('[data-d]')) e.preventDefault(); }, { passive: false });
     board.addEventListener('contextmenu', (e) => e.preventDefault());
+    board.addEventListener('keydown', (e) => { // keyboard / switch access to the tap zones
+      const z = e.target.closest && e.target.closest('.zone[data-d]'); if (!z || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault(); const pid = z.closest('.panel').dataset.pid; changeLife(pid, +z.dataset.d * (e.shiftKey ? 10 : 1)); flashZone(z);
+    });
     updateAllPanels(); updateCenter();
   }
   // Safe-area insets become inner padding, mapped from screen edges to the panel's own (rotated) edges
@@ -398,16 +403,18 @@
     const pr = { pid: panel.dataset.pid, d: +t.dataset.d, el: t, long: false };
     t.classList.add('pressed');
     pr.timer = setTimeout(() => {
-      pr.long = true; changeLife(pr.pid, pr.d * 10);
-      pr.rep = setInterval(() => changeLife(pr.pid, pr.d * 10), 650);
+      pr.long = true; changeLife(pr.pid, pr.d * 10); flashZone(t);
+      pr.rep = setInterval(() => { changeLife(pr.pid, pr.d * 10); flashZone(t); }, 650);
     }, 450);
     presses.set(e.pointerId, pr);
   }
   function endPress(id, cancel) {
     const pr = presses.get(id); if (!pr) return;
     presses.delete(id); clearTimeout(pr.timer); clearInterval(pr.rep); pr.el.classList.remove('pressed');
-    if (!pr.long && !cancel && data.current) changeLife(pr.pid, pr.d);
+    if (!pr.long && !cancel && data.current) { changeLife(pr.pid, pr.d); flashZone(pr.el); }
   }
+  // brief glow on the tapped half (restarted on every tap so rapid taps each show)
+  function flashZone(el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
   window.addEventListener('pointerup', (e) => endPress(e.pointerId, false));
   window.addEventListener('pointercancel', (e) => endPress(e.pointerId, true));
 

@@ -112,3 +112,15 @@ Optional. Without an account the app works exactly as before, 100% local.
   - Commander / deck detail sheets show win rate per turn position and turn-1 Sol Ring count; History shows a ▶N badge
     (turn position) and a Sol Ring badge per player.
 - `tools/seed-v15.mjs` builds demo data (tracked 3- and 4-player games plus older untracked ones) for tests/screenshots.
+
+## Life tap zones (v1.5.1)
+- The round +/− buttons on the life panels are gone. Each panel is split into two tap zones in the player's own
+  orientation (panels are rotated per seat): the half above the life number adds 1, the half below subtracts 1
+  (the split follows the number's centre, including safe-area padding). Hold = ±10, repeating every 0.65 s while held.
+- Hints: faint "+" / "−" glyphs at the left and right edges, just above / below the number's centre line (not buttons).
+  Each tap briefly glows on that half; the running-change pill now sits beside the number so it never covers the name.
+- The ⋯ button and status chips keep working on top of the zones; the name/commander text is click-through.
+- Input: pointer events only (touchstart is prevented, so no extra click, no double-tap zoom), no text selection;
+  zones have role="button" + labels and accept Enter/Space (Shift = ±10) for keyboard/switch access.
+- Tests tap by coordinates computed from each seat's rotation (`halfPoint()` in `tools/test.mjs`) for 2–6 players on
+  phone and iPad. `tools/shot-zones.mjs` renders `screenshots/36-game-tap-zones*.png` (`ALL=1` adds iPad / 2p / 3p).

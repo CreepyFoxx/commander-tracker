@@ -285,9 +285,24 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .panel { background-blend-mode: soft-light, normal; }
 .panel::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1;
   background: linear-gradient(180deg, rgba(255, 255, 255, .07), transparent 32%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07), inset 0 0 60px -20px var(--glow-s); }
-.zone { position: absolute; left: 0; right: 0; height: 50%; z-index: 1; transition: background .12s; }
-.zone.plus { top: 0; } .zone.minus { bottom: 0; }
-.zone.pressed { background: rgba(255, 255, 255, .08); }
+/* life tap zones (v1.5.1): the half above the number (in the player's own orientation) is +1, the half below is -1;
+   hold = ±10, repeating. Only faint +/− glyphs at the outer edges hint at it; a short glow confirms each tap. */
+.zone { position: absolute; left: 0; right: 0; height: 50%; z-index: 1; transition: background .12s; -webkit-tap-highlight-color: transparent; outline: none; }
+/* split exactly at the life number's centre (the safe-area padding can shift it off the panel's midline) */
+.zone.plus { top: 0; height: calc(50% + (var(--pt, 0px) - var(--pb, 0px)) / 2); } .zone.minus { bottom: 0; height: calc(50% - (var(--pt, 0px) - var(--pb, 0px)) / 2); }
+.zone.pressed { background: rgba(255, 255, 255, .06); }
+.zone::after { content: ''; position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+.zone.plus::after { background: radial-gradient(75% 110% at 50% 100%, rgba(255, 255, 255, .2), rgba(255, 255, 255, .05) 55%, transparent 80%); }
+.zone.minus::after { background: radial-gradient(75% 110% at 50% 0%, rgba(255, 255, 255, .2), rgba(255, 255, 255, .05) 55%, transparent 80%); }
+.zone.flash::after { animation: zflash .42s ease-out; }
+@keyframes zflash { 0% { opacity: 1; } 100% { opacity: 0; } }
+.zone:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-text); }
+/* hints sit at the left/right edges, "+" just above and "−" just below the life number's centre line (clear of the name,
+   the ⋯ button and the chips, which live in the corners) */
+.z-hint { position: absolute; bottom: max(8px, 7cqh); pointer-events: none; font: 300 clamp(18px, 12cqh, 30px)/1 var(--font-num); color: rgba(255, 255, 255, .22); }
+.zone.minus .z-hint { bottom: auto; top: max(8px, 7cqh); }
+.z-hint.l { left: calc(var(--pl, 0px) + max(12px, 4cqw)); } .z-hint.r { right: calc(var(--pr, 0px) + max(12px, 4cqw)); }
+.panel.dead .z-hint { opacity: .5; }
 .p-head { position: absolute; top: var(--pt, 0px); left: var(--pl, 0px); right: calc(52px + var(--pr, 0px)); padding: 10px 12px 0 14px; z-index: 2; pointer-events: none; min-width: 0; }
 .p-name { font-weight: 750; font-size: clamp(13px, 8cqh, 18px); letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 4px rgba(0, 0, 0, .45); }
 .p-cmd { display: flex; align-items: center; gap: 6px; font-size: clamp(11px, 6cqh, 13px); color: rgba(255, 255, 255, .7); min-width: 0; }
@@ -297,13 +312,11 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .p-more:active { background: rgba(255, 255, 255, .18); }
 .p-more svg { fill: currentColor; stroke: none; }
 .p-center { position: absolute; top: var(--pt, 0px); right: var(--pr, 0px); bottom: var(--pb, 0px); left: var(--pl, 0px); display: flex; align-items: center; justify-content: center; gap: min(4cqw, 22px); z-index: 2; pointer-events: none; }
-.lbtn { pointer-events: auto; width: min(58px, 15cqw, 30cqh); height: min(58px, 15cqw, 30cqh); border-radius: 50%; font-size: min(30px, 8cqw); font-weight: 500; line-height: 1; flex: none;
-  background: rgba(255, 255, 255, .07); color: rgba(255, 255, 255, .88); border: 1px solid rgba(255, 255, 255, .13); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); transition: transform var(--t-fast), background var(--t-fast); }
-.lbtn.pressed { background: rgba(255, 255, 255, .2); transform: scale(.92); }
 .p-life-box { position: relative; min-width: 1.6em; text-align: center; font-size: min(46cqh, 30cqw); }
 .p-life { font-size: 1em; font-weight: 800; line-height: 1; letter-spacing: -.035em; font-family: var(--font-num); font-variant-numeric: tabular-nums;
   text-shadow: 0 3px 0 rgba(0, 0, 0, .12), 0 0 .5em var(--glow-s), 0 6px 26px rgba(0, 0, 0, .35); transition: color .2s; }
-.p-delta { position: absolute; left: 50%; top: -.05em; transform: translate(-50%, -100%); font-size: max(15px, .22em); font-weight: 800; color: #6ff0a8; opacity: 0; transition: opacity .25s; white-space: nowrap;
+/* v1.5.1: beside the number (the sides are free now that the +/- buttons are gone), so it never covers the name row */
+.p-delta { position: absolute; left: calc(100% + .06em); top: 50%; transform: translateY(-50%); font-size: max(15px, .2em); font-weight: 800; color: #6ff0a8; opacity: 0; transition: opacity .25s; white-space: nowrap;
   font-family: var(--font-num); font-variant-numeric: tabular-nums; padding: .06em .45em; border-radius: 999px; background: rgba(8, 6, 18, .38); }
 .p-delta.show { opacity: 1; }
 .p-delta.neg { color: #ff9aaa; }
