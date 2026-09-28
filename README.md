@@ -155,9 +155,10 @@ Optional. Without an account the app works exactly as before, 100% local.
   - `test-games.mjs`: five scripted full games (2–6 players) ending by life, commander damage (partner), poison,
     concede and draw, with turn order changed and Sol Rings marked. It checks the saved records, History and Stats numbers exactly.
   - `test-stress.mjs`: 200 rapid taps, a 2-hour clock, 60 games (render time and frame gaps), a 1500-game import,
-    a too-big import, accessibility names/dialogs/Escape, reduced motion, and the update path from v1.5.2 mid-game (served from the
+    a too-big import, accessibility names/dialogs/Escape, reduced motion, and the update path from v1.6.1 mid-game (served from the
     deploy repo history) plus a newer worker that can't navigate.
-  - `test-online.mjs`: two users in a group, offline play then sync, deck edit/delete, and an offline game delete that syncs later.
+  - `test-online.mjs`: two users in a group, offline play then sync, deck edit/delete, an offline game delete that syncs later,
+    and (v1.7) brackets through migration, deck editor, seat overrides, guests, sync, the offline queue and DB constraints.
 - Known WebKit test limits: Playwright's WebKit offline emulation also blocks service-worker responses, so offline
   checks there use a real server shutdown (local) or a fetch wrapper (online). WebKit can't intercept requests from pages
   controlled by a service worker, so one online device runs with service workers blocked under WebKit.
@@ -188,3 +189,28 @@ Optional. Without an account the app works exactly as before, 100% local.
 - Limits: the turn is emulated, so iOS itself stays in portrait (status bar, notifications and the keyboard stay upright;
   that's why shared sheets with text fields stay upright too). While a text field is focused the board isn't re-laid out
   (the keyboard resizes the viewport); it catches up on the next resize.
+
+## Commander Brackets (v1.7.0)
+- Official WotC Commander Brackets, 1–5: **1 Exhibition**, **2 Core**, **3 Upgraded**, **4 Optimized**, **5 cEDH**. Optional on every
+  deck/commander (including guest commanders). Shown as a small coloured chip with the number and name.
+- Where you set it: the commander / deck editor, the seat's Bracket button at game setup, the guest-commander form, and the
+  in-game ⋯ sheet ("this game only"). Tapping the selected bracket clears it.
+- Per-game snapshot: each player entry stores the bracket their deck had when the game started. Editing a deck later does not
+  change past games. At setup, your own deck's bracket is saved on the deck (online: `cloud.saveDeck`); someone else's deck
+  uses a per-seat override for the next game only; a guest's bracket lives on the guest commander.
+- History: when every player has the same bracket it shows e.g. `B3 Upgraded`; mixed pods show a range like `B2–4`; partial
+  pods (some unset) show e.g. `B3 Upgraded 2/3`. Older games simply have no bracket.
+- Stats → **Brackets** card: games / win rate by bracket (per player and per commander), highest / lowest bracket at the table
+  (mixed-bracket games where every player had one), and a Bracket filter on the existing turn-position card. Games without a
+  bracket are excluded; a small note says so, as with the turn-position stats.
+- Data: additive. Local `commanders[].bracket` and `games[].players[].bracket` (null / missing = unset). `normBracket` accepts
+  1–5 (including numeric strings) and drops anything else. Data version stays 1; backups and the offline queue carry brackets.
+- Online (Supabase): migration `commander_brackets` adds `decks.bracket` (1–5 or null), `games.bracket_min` / `bracket_max`
+  (both null, or 1 ≤ min ≤ max ≤ 5), and a JSON check that `games.players[*].bracket` is missing, null or 1–5. RLS is unchanged;
+  only the deck owner can change a deck's bracket. Sync, the offline queue and backups round-trip brackets. An older client that
+  never sends brackets still inserts and loads fine.
+- Tools: `tools/seed-v17.mjs` (bracketed seed), `tools/shot-v17.mjs` (40-* screenshots), `tools/game-fixture.mjs` (shared fixture).
+  Stress updates from the live v1.6.1 commit mid-game.
+- Limits: only the deck owner can change a deck's bracket (others use a per-game override); a guest's bracket is remembered from
+  their game history; pod stats ignore partial pods; a live 1.6.1 client ignores brackets (its saves keep the deck bracket but
+  its games have none).

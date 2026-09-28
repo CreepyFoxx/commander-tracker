@@ -65,10 +65,16 @@
     durationMs: r.duration_ms, turns: r.turns, startingLife: r.starting_life, playerCount: r.player_count, winnerIndex: r.winner_index, players: r.players,
     firstPlayerIndex: r.first_player_index ?? null, // v1.5 (null for older games)
   });
+  // v1.7 Commander Brackets: each player's bracket travels inside players[] (frozen when the game started);
+  // bracket_min / bracket_max summarise the pod for querying (null when nobody had one)
+  const normBracket = (b) => { if (b == null || b === '' || typeof b === 'boolean') return null; const n = Number(b); return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null; };
+  const podRange = (players) => { const bs = (players || []).map((p) => normBracket(p && p.bracket)).filter(Boolean); return bs.length ? [Math.min(...bs), Math.max(...bs)] : [null, null]; };
+  const cleanPlayers = (players) => players.map((p) => (p && 'bracket' in p ? { ...p, bracket: normBracket(p.bracket) } : p));
   const toRow = (g, gid) => ({
     id: g.id, group_id: gid, recorded_by: st.user.id, started_at: new Date(g.startedAt).toISOString(), ended_at: new Date(g.endedAt).toISOString(),
     duration_ms: Math.round(g.durationMs || 0), turns: g.turns || null, starting_life: g.startingLife, player_count: g.playerCount,
-    winner_index: g.winnerIndex, players: g.players,
+    winner_index: g.winnerIndex, players: cleanPlayers(g.players),
+    bracket_min: podRange(g.players)[0], bracket_max: podRange(g.players)[1],
     // v1.5: who took the first turn (per-player turnPos / solRingT1 travel inside players)
     first_player_index: Number.isInteger(g.firstPlayerIndex) && g.firstPlayerIndex >= 0 && g.firstPlayerIndex < g.playerCount ? g.firstPlayerIndex : null,
   });
@@ -178,7 +184,7 @@
     g.members = mem.data.filter((r) => r.profiles).map((r) => ({ ...r.profiles, role: r.role })).sort((a, b) => a.display_name.localeCompare(b.display_name));
     const ids = g.members.map((m) => m.id);
     const [decks, guests, games] = await Promise.all([
-      ids.length ? sb.from('decks').select('id, owner_id, commander, partner, colors, name, created_at, updated_at').in('owner_id', ids) : Promise.resolve({ data: [] }),
+      ids.length ? sb.from('decks').select('id, owner_id, commander, partner, colors, name, bracket, created_at, updated_at').in('owner_id', ids) : Promise.resolve({ data: [] }),
       sb.from('guests').select('id, name, linked_user_id, created_at').eq('group_id', gid),
       sb.from('games').select('*').eq('group_id', gid).order('ended_at', { ascending: false }).limit(2000),
     ]);
@@ -235,6 +241,7 @@
   async function saveDeck(deck) {
     need(st.user && sb, 'Sign in first');
     const row = { commander: deck.commander.trim(), partner: (deck.partner || '').trim() || null, colors: deck.colors || [], name: (deck.name || '').trim() || null, updated_at: new Date().toISOString() };
+    if ('bracket' in deck) row.bracket = normBracket(deck.bracket); // v1.7; callers that don't know about brackets leave it as is
     const q = deck.id ? sb.from('decks').update(row).eq('id', deck.id).select().single() : sb.from('decks').insert({ ...row, owner_id: st.user.id }).select().single();
     const { data, error } = await q;
     if (error) throw new Error(friendlyError(error));

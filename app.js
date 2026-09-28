@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.6.1';
+  const APP_VERSION = '1.7.0';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -55,6 +55,7 @@
     down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
     hand: '<svg viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10V4.5a1.5 1.5 0 0 1 3 0V11M15 10.5V6a1.5 1.5 0 0 1 3 0v7.5c0 4-2.6 7-6.5 7-2.6 0-4.2-1.3-5.6-3.4L3.8 13.6a1.6 1.6 0 0 1 2.6-1.8L9 14.5V8a1.5 1.5 0 0 1 3 0"/></svg>',
     palette: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2 0-1.4-1.2-1.6-1.2-2.8 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4C21 6.4 17 3 12 3z"/><circle cx="7.5" cy="11.5" r="1.2"/><circle cx="10" cy="7.5" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>',
+    bracket: '<svg viewBox="0 0 24 24"><path d="M3.5 17.5a8.5 8.5 0 0 1 17 0"/><path d="M12 17.5l4.3-5.3"/><circle cx="12" cy="17.5" r="1.5"/><path d="M5.9 11.4l1.4 1.1M12 8.9v1.8M18.1 11.4l-1.4 1.1"/></svg>',
     solring: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="14.5" rx="8" ry="5.8"/><ellipse cx="12" cy="14.5" rx="4.2" ry="2.6"/><path d="M12 3.2l2.3 3.1L12 8.7 9.7 6.3z"/></svg>',
   };
   // commander colour identity as a CSS gradient (deck accent strips, commander bars)
@@ -63,6 +64,46 @@
     const cs = colors && colors.length ? colors : ['C'];
     if (cs.length === 1) return `linear-gradient(${dir}, ${MANA_HEX[cs[0]]}, ${MANA_HEX[cs[0]]})`;
     return `linear-gradient(${dir}, ${cs.map((c, i) => `${MANA_HEX[c]} ${Math.round((i / (cs.length - 1)) * 100)}%`).join(', ')})`;
+  }
+
+  // ---------- Commander Brackets (v1.7, WotC 1-5 scale) ----------
+  const BR_NAME = ['', 'Exhibition', 'Core', 'Upgraded', 'Optimized', 'cEDH'];
+  const BR_DESC = ['', 'Ultra-casual: theme and story over power.', 'Precon level: no Game Changers, mass land denial, extra-turn chains or 2-card combos.',
+    'Stronger decks: up to three Game Changers, no mass land denial or early 2-card combos.', 'High power: anything legal goes.', 'Competitive: tuned to win the cEDH metagame.'];
+  // 1..5, anything else (missing, null, 0, 6, 2.5, "x") = not set
+  const normBracket = (b) => { if (b == null || b === '' || typeof b === 'boolean') return null; const n = Number(b); return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null; };
+  // small chip: number + name (the name hides on narrow panels via CSS)
+  function bchip(b, cls = '') {
+    b = normBracket(b); if (!b) return '';
+    return `<span class="bchip b${b} ${cls}" role="img" aria-label="Bracket ${b}, ${BR_NAME[b]}" title="Bracket ${b} · ${BR_NAME[b]}"><b>${b}</b><span class="bn">${BR_NAME[b]}</span></span>`;
+  }
+  const brBadge = (b) => (normBracket(b) ? `<span class="br-badge b${b}" role="img" aria-label="Bracket ${b}, ${BR_NAME[b]}" title="Bracket ${b} · ${BR_NAME[b]}">B${b}</span>` : '');
+  // the pod's brackets: lowest / highest among players that have one; all = every player has one
+  function podBracket(players) {
+    const bs = players.map((p) => normBracket(p.bracket)); const known = bs.filter(Boolean);
+    if (!known.length) return null;
+    return { lo: Math.min(...known), hi: Math.max(...known), all: known.length === bs.length, known: known.length, n: bs.length };
+  }
+  const podLabel = (pb) => (pb.lo === pb.hi ? `B${pb.lo}` : `B${pb.lo}–${pb.hi}`);
+  const brDescHtml = (b) => (b ? `<b>${b} · ${BR_NAME[b]}</b> — ${BR_DESC[b]}` : 'Not set. Tap a bracket (tap it again to clear).');
+  // picker: 5 buttons (tap the selected one again = unset)
+  function bracketPicker(cur, opts = {}) {
+    cur = normBracket(cur);
+    return `<div class="bracket-pick" role="radiogroup" aria-label="${esc(opts.label || 'Commander Bracket')}">${[1, 2, 3, 4, 5].map((b) => `<button type="button" class="bp b${b} ${cur === b ? 'on' : ''}" data-bracket="${b}" role="radio" aria-checked="${cur === b}" aria-label="Bracket ${b}: ${BR_NAME[b]}"><b>${b}</b><small>${BR_NAME[b]}</small></button>`).join('')}</div>
+      ${opts.desc === false ? '' : `<div class="bp-desc" data-role="bdesc">${brDescHtml(cur)}</div>`}`;
+  }
+  // wires a picker inside root; get() -> current value, set(v) is called with the new value (null = unset)
+  function bindBracketPicker(root, get, set) {
+    root.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-bracket]'); if (!b || !root.contains(b)) return;
+      const v = +b.dataset.bracket; const nv = get() === v ? null : v;
+      if (set(nv) === false) return;
+      paintBracketPicker(root, nv);
+    });
+  }
+  function paintBracketPicker(root, v) {
+    root.querySelectorAll('[data-bracket]').forEach((x) => { const on = +x.dataset.bracket === v; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); });
+    const d = root.querySelector('[data-role=bdesc]'); if (d) d.innerHTML = brDescHtml(v);
   }
 
   // ---------- store ----------
@@ -79,6 +120,7 @@
       partner: String(c.partner || '').slice(0, 80),
       colors: WUBRG.filter((x) => Array.isArray(c.colors) && c.colors.includes(x)),
       owner: String(c.owner || '').slice(0, 40), createdAt: +c.createdAt || Date.now(),
+      bracket: normBracket(c.bracket), // v1.7 (null = not set; older data has none)
     };
   }
   function normalize(d) {
@@ -86,6 +128,8 @@
     out.settings = Object.assign(defaults().settings, (d && d.settings) || {});
     out.commanders = Array.isArray(out.commanders) ? out.commanders.map(sanitizeCommander) : [];
     out.games = Array.isArray(out.games) ? out.games.filter((g) => g && Array.isArray(g.players)) : [];
+    // v1.7: per-player bracket snapshots are optional; drop invalid values (older games simply have none)
+    out.games.forEach((g) => g.players.forEach((p) => { if (p && 'bracket' in p) p.bracket = normBracket(p.bracket); }));
     if (out.current && !Array.isArray(out.current.players)) out.current = null;
     return out;
   }
@@ -221,6 +265,7 @@
   let cmdSort = 'games';
   let statsScope = 'group';
   let posSize = null; let posBy = 'players'; let solBy = 'players'; // v1.5 stats view state (null = most common pod size)
+  let posBr = 'any'; let brBy = 'players'; // v1.7: turn-position bracket filter, Brackets card table
   function renderTab() {
     $$('#tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     const v = $('#view'); v.dataset.tab = tab;
@@ -266,13 +311,29 @@
           <span class="seat-dot seat-${i}">${i + 1}</span>
           <div class="seat-fields">
             <input type="text" list="player-names" placeholder="Player ${i + 1}" aria-label="Player ${i + 1} name" value="${esc(seat.name)}" data-bind="seatName" data-i="${i}" autocomplete="off" autocapitalize="words" enterkeyhint="done" maxlength="24">
-            <button class="cmd-pick ${c ? '' : 'empty'}" data-act="pickCmd" data-i="${i}">${c ? `<span class="pips">${pips(c.colors)}</span><span class="ellipsis">${esc(cmdLabel(c))}</span>` : '<span>Choose commander…</span>'}</button>
+            <div class="cmd-line"><button class="cmd-pick ${c ? '' : 'empty'}" data-act="pickCmd" data-i="${i}">${c ? `<span class="pips">${pips(c.colors)}</span><span class="ellipsis">${esc(cmdLabel(c))}</span>` : '<span>Choose commander…</span>'}</button>
+              ${c ? seatBrBtn(i, c.bracket, cmdLabel(c)) : ''}</div>
           </div></div>`;
       }).join('')}
       <datalist id="player-names">${knownPlayers().map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
     </section>
     <button class="btn primary big block start-btn" data-act="startGame">${I.play}Start game</button>
     ${installHint()}`;
+  }
+
+  // setup: the bracket button next to a seat's commander / deck
+  function seatBrBtn(i, b, what) {
+    b = normBracket(b);
+    return `<button class="seat-br ${b ? '' : 'empty'}" data-act="seatBracket" data-i="${i}" aria-label="${b ? `Bracket ${b}, ${BR_NAME[b]}` : 'Set bracket'} for ${esc(what)}">${b ? bchip(b) : `${I.bracket}<span>Bracket</span>`}</button>`;
+  }
+  // local seats: the bracket is saved on the commander (group seats: see openGroupSeatBracket)
+  function openSeatBracket(i) {
+    if (gm()) { openGroupSeatBracket(i); return; }
+    const c = getCmd(getSetup().seats[i].commanderId); if (!c) return;
+    const ov = openSheet(`<div class="sheet-head"><div><h2>Bracket</h2><div class="muted small ellipsis"><span class="pips">${pips(c.colors)}</span> ${esc(cmdLabel(c))}</div></div><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+      <div class="sheet-body">${bracketPicker(c.bracket)}<p class="hint">Saved on this commander and used for its next games. Change it for one game only from the ⋯ menu during the game.</p>
+      <button class="btn primary block" data-close>Done</button></div>`, { onClose: () => renderTab() });
+    bindBracketPicker(ov, () => normBracket(c.bracket), (v) => { c.bracket = v; save(); });
   }
 
   function openCmdPicker(i) {
@@ -290,7 +351,7 @@
       const exact = data.commanders.some((c) => c.name.toLowerCase() === ql);
       list.innerHTML = `${ql && !exact ? `<button class="pick-row new" data-new>+ Create “${esc(q.trim())}”</button>` : ''}
         ${!ql ? '<button class="pick-row new" data-new>+ New commander</button>' : ''}
-        ${cs.map((c) => `<button class="pick-row ${c.id === s.seats[i].commanderId ? 'on' : ''}" data-id="${c.id}"><span class="pips">${pips(c.colors)}</span><span class="pr-main"><b>${esc(cmdLabel(c))}</b>${c.owner ? `<small>${esc(c.owner)}</small>` : ''}</span></button>`).join('')}
+        ${cs.map((c) => `<button class="pick-row ${c.id === s.seats[i].commanderId ? 'on' : ''}" data-id="${c.id}"><span class="pips">${pips(c.colors)}</span><span class="pr-main"><b>${esc(cmdLabel(c))}</b>${c.owner || c.bracket ? `<small class="pr-sub">${bchip(c.bracket)}${c.owner ? `<span class="ellipsis">${esc(c.owner)}</span>` : ''}</small>` : ''}</span></button>`).join('')}
         ${s.seats[i].commanderId ? '<button class="pick-row clear" data-id="">No commander</button>' : ''}
         ${!cs.length && !ql ? '<p class="muted small center">No saved commanders yet.</p>' : ''}`;
     };
@@ -313,7 +374,7 @@
 
   function openCmdEditor(id, opts = {}) {
     const c = getCmd(id);
-    const st = { name: c ? c.name : opts.name || '', partner: c ? c.partner : '', colors: c ? c.colors.slice() : [], owner: c ? c.owner : opts.owner || '' };
+    const st = { name: c ? c.name : opts.name || '', partner: c ? c.partner : '', colors: c ? c.colors.slice() : [], owner: c ? c.owner : opts.owner || '', bracket: c ? normBracket(c.bracket) : null };
     const stats = c ? commanderStats().get(c.id) : null;
     const recent = c ? data.games.filter((g) => g.players.some((p) => p.commanderId === c.id)).slice(0, 5) : [];
     const ov = openSheet(`<div class="sheet-head"><h2>${c ? 'Edit commander' : 'New commander'}</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
@@ -323,10 +384,12 @@
         <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="${st.colors.includes(x)}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
         <div class="field"><label>Owner / player <span class="muted">(optional)</span></label><input type="text" data-f="owner" list="owner-names" value="${esc(st.owner)}" placeholder="Who plays this deck" autocapitalize="words" maxlength="40">
           <datalist id="owner-names">${knownPlayers().map((n) => `<option value="${esc(n)}">`).join('')}</datalist></div>
+        <div class="field br-field"><label>Commander Bracket <span class="muted">(optional)</span></label>${bracketPicker(st.bracket)}</div>
         ${stats ? `<div class="mini-stats"><div><b>${stats.games}</b><span>games</span></div><div><b>${stats.wins}</b><span>wins</span></div><div><b>${pct(stats.wins, stats.games)}</b><span>win rate</span></div><div><b>${fmtDur(stats.dur / stats.games)}</b><span>avg game</span></div></div>${cmdTurnHtml(stats)}` : ''}
-        ${recent.length ? `<div class="sec-title">Recent games</div>${recent.map((g) => { const me = g.players.find((p) => p.commanderId === c.id); return `<div class="recent-row"><span>${fmtShort(g.endedAt)}</span><span class="ellipsis">${me.isWinner ? '🏆 Won' : ordinal(me.place || g.players.length)} · ${g.playerCount}p${g.turns ? ' · T' + g.turns : ''}${Number.isInteger(me.turnPos) ? ' · ' + ordinal(me.turnPos) + ' to play' : ''}${me.solRingT1 ? ' · T1 Sol Ring' : ''}</span><span class="muted">${fmtDur(g.durationMs)}</span></div>`; }).join('')}` : ''}
+        ${recent.length ? `<div class="sec-title">Recent games</div>${recent.map((g) => { const me = g.players.find((p) => p.commanderId === c.id); return `<div class="recent-row"><span>${fmtShort(g.endedAt)}</span><span class="ellipsis">${me.isWinner ? '🏆 Won' : ordinal(me.place || g.players.length)} · ${g.playerCount}p${normBracket(me.bracket) ? ' · B' + me.bracket : ''}${g.turns ? ' · T' + g.turns : ''}${Number.isInteger(me.turnPos) ? ' · ' + ordinal(me.turnPos) + ' to play' : ''}${me.solRingT1 ? ' · T1 Sol Ring' : ''}</span><span class="muted">${fmtDur(g.durationMs)}</span></div>`; }).join('')}` : ''}
         <div class="sheet-actions">${c ? '<button class="btn danger-text" data-a="delete">Delete</button>' : ''}<button class="btn primary grow" data-a="save">${c ? 'Save' : 'Add commander'}</button></div>
       </div>`, { cls: 'tall' });
+    bindBracketPicker(ov.querySelector('.br-field'), () => st.bracket, (v) => { st.bracket = v; });
     ov.addEventListener('click', async (e) => {
       const tog = e.target.closest('[data-color]');
       if (tog) {
@@ -365,6 +428,7 @@
       return {
         id: 'p' + i, seat: i, name: seat.name.trim() || `Player ${i + 1}`,
         commanderId: c ? c.id : null, commanderName: c ? c.name : '', partnerName: c ? c.partner : '', colors: c ? c.colors.slice() : [],
+        bracket: c ? normBracket(c.bracket) : null, // v1.7: frozen for this game (editing the deck later doesn't change it)
         life: s.life, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, killedBy: null,
       };
     });
@@ -501,7 +565,7 @@
   function updatePanel(p) {
     const el = panelEl(p.id); if (!el) return; const g = G();
     el.querySelector('.p-name').textContent = p.name;
-    el.querySelector('.p-cmd').innerHTML = p.commanderName ? `<span class="pips">${pips(p.colors)}</span><span class="ellipsis">${esc(p.commanderName)}${p.partnerName ? ' + ' + esc(p.partnerName) : ''}</span>` : '';
+    el.querySelector('.p-cmd').innerHTML = `${bchip(p.bracket, 'in-game')}${p.commanderName ? `<span class="pips">${pips(p.colors)}</span><span class="ellipsis">${esc(p.commanderName)}${p.partnerName ? ' + ' + esc(p.partnerName) : ''}</span>` : ''}`;
     el.querySelector('.p-life').textContent = p.life;
     el.classList.toggle('low', p.life <= 10 && !p.eliminated);
     el.classList.toggle('dead', p.eliminated);
@@ -633,6 +697,7 @@
     const body = ov.querySelector('[data-role=body]');
     const draw = () => { body.innerHTML = playerSheetBody(p); ov.querySelector('[data-role=life]').textContent = p.life; };
     ov._refresh = draw;
+    bindBracketPicker(body, () => normBracket(p.bracket), (v) => { p.bracket = v; updatePanel(p); save(); setTimeout(() => { if (!ov._closing) draw(); }, 0); });
     body.addEventListener('click', async (e) => {
       const b = e.target.closest('button[data-pa]'); if (!b) return;
       const a = b.dataset.pa; const d = +b.dataset.d || 0;
@@ -672,6 +737,7 @@
         ${counterRow(`<span class="cnt-ico life">${I.heart}</span><div class="cnt-label"><b>Life</b><small>adjust by 1</small></div>`, p.life, 'data-pa="life"', '', '', 'life')}
         ${counterRow(`<span class="cnt-ico poison">${I.poison}</span><div class="cnt-label"><b>Poison</b><small>10 = loss</small></div>`, p.poison, 'data-pa="poison"', p.poison >= 10 ? 'lethal' : p.poison >= 7 ? 'warn' : '', 10, 'poison')}
         ${taxRows}
+        <div class="ps-br"><div class="ps-br-head"><span class="cnt-ico br">${I.bracket}</span><div class="cnt-label"><b>Bracket</b><small>${normBracket(p.bracket) ? `${p.bracket} · ${BR_NAME[p.bracket]} · ` : ''}this game only</small></div></div>${bracketPicker(p.bracket, { desc: false, label: 'Bracket for this game' })}</div>
         <div class="toggle-row three"><button class="tbtn ${g.monarch === p.id ? 'on' : ''}" data-pa="monarch" aria-pressed="${g.monarch === p.id}">${I.crown}Monarch</button><button class="tbtn ${g.initiative === p.id ? 'on' : ''}" data-pa="initiative" aria-pressed="${g.initiative === p.id}">${I.castle}Initiative</button>
           <button class="tbtn sol ${p.solRing ? 'on' : ''}" data-pa="solring" aria-pressed="${!!p.solRing}" aria-label="Turn 1 Sol Ring">${I.solring}T1 Sol Ring</button></div>
         ${p.eliminated ? `<div class="out-note">☠ Out ${ordinal(p.elimOrder)} · ${REASON[p.elimReason]}</div>` : ''}
@@ -751,7 +817,7 @@
     const draw = () => {
       const sorted = g.players.slice().sort((a, b) => (a.eliminated - b.eliminated) || ((b.elimOrder || 0) - (a.elimOrder || 0)));
       list.innerHTML = sorted.map((p) => `<button class="win-row ${winner === p.id ? 'on' : ''}" data-w="${p.id}"><span class="seat-dot sm seat-${p.seat}"></span>
-        <span class="pr-main"><b>${esc(p.name)}</b><small>${p.commanderName ? pips(p.colors) + ' ' + esc(p.commanderName) : 'No commander'}</small></span>
+        <span class="pr-main"><b>${esc(p.name)}</b><small>${brBadge(p.bracket)}${p.commanderName ? pips(p.colors) + ' ' + esc(p.commanderName) : 'No commander'}</small></span>
         <span class="win-status">${p.eliminated ? `Out ${ordinal(p.elimOrder)}<small>${REASON[p.elimReason]}</small>` : `${p.life} life`}</span><span class="radio"></span></button>`).join('')
         + `<button class="win-row draw ${winner === 'draw' ? 'on' : ''}" data-w="draw"><span class="pr-main"><b>No winner / draw</b></span><span class="radio"></span></button>`;
       ov.querySelector('[data-role=save]').disabled = !winner;
@@ -813,6 +879,7 @@
         eliminated: p.eliminated, elimOrder: p.elimOrder, elimReason: p.elimReason,
         killedBy: p.killedBy ? idxOf(p.killedBy) : null, isWinner: p === winner, wentFirst: pos[i] === 1, place: placeOf.get(p),
         turnPos: pos[i], solRingT1: !!p.solRing, // v1.5
+        bracket: normBracket(p.bracket), // v1.7: the bracket this player's deck had in this game
         ...(g.groupId ? { kind: p.kind, userId: p.userId || null, guestId: p.guestId || null, deckId: p.deckId || null } : {}),
       })),
     };
@@ -883,7 +950,7 @@
     v.innerHTML = `<header class="page-head"><div><div class="eyebrow">${data.commanders.length} deck${data.commanders.length === 1 ? '' : 's'}</div><h1>Commanders</h1></div><button class="btn primary sm" data-act="newCmd">+ Add</button></header>
       ${list.length ? `<div class="seg small-seg">${[['games', 'Most played'], ['winrate', 'Win rate'], ['recent', 'Recent'], ['name', 'A–Z']].map(([k, l]) => `<button data-act="cmdSort" data-v="${k}" class="${cmdSort === k ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''}
       ${list.length ? list.map(({ c, s }) => `<button class="cmd-card" data-act="editCmd" data-id="${c.id}" style="--deck:${manaGrad(c.colors)}">
-          <div class="cc-top"><div class="cc-name"><b>${esc(c.name)}</b>${c.partner ? `<small>+ ${esc(c.partner)}</small>` : ''}<span class="cc-meta"><span class="pips" aria-label="${colorWords(c.colors)}" role="img">${pips(c.colors)}</span>${c.owner ? `<small class="owner">${esc(c.owner)}</small>` : ''}</span></div>
+          <div class="cc-top"><div class="cc-name"><b>${esc(c.name)}</b>${c.partner ? `<small>+ ${esc(c.partner)}</small>` : ''}<span class="cc-meta"><span class="pips" aria-label="${colorWords(c.colors)}" role="img">${pips(c.colors)}</span>${bchip(c.bracket)}${c.owner ? `<small class="owner">${esc(c.owner)}</small>` : ''}</span></div>
           ${wrRing(s)}</div>
           <div class="cc-stats"><span><b>${s.games}</b> game${s.games === 1 ? '' : 's'}</span><span><b>${s.wins}</b> win${s.wins === 1 ? '' : 's'}</span><span><b>${s.games ? fmtDur(s.dur / s.games) : '—'}</b> avg</span>${s.kills ? `<span><b>${s.kills}</b> cmdr kills</span>` : ''}<span>${s.last ? 'Last ' + fmtShort(s.last) : 'Never played'}</span></div>
         </button>`).join('') : `<div class="empty"><div class="empty-ico">${I.shield}</div><p>No commanders yet.</p><p class="muted small">Add your decks here, or create them when setting up a game.</p><button class="btn primary" data-act="newCmd">Add your first commander</button></div>`}`;
@@ -952,7 +1019,7 @@
     const players = [...byPlayer.values()].sort((a, b) => b.g - a.g || b.w - a.w);
     const topPlayer = players.length > 1 ? players.filter((p) => p.w > 0).sort((a, b) => b.w / b.g - a.w / a.g || b.g - a.g)[0] : null;
     const winnerOf = (g) => g.players[g.winnerIndex];
-    const extra = turnStatsHtml(games, countP, meMode);
+    const extra = turnStatsHtml(games, countP, meMode) + bracketStatsHtml(games, countP, meMode);
     v.innerHTML = `${statsHead()}
       <div class="tiles">
         <div class="tile t-violet"><i class="t-ico">${I.chart}</i><b>${n}</b><span>games played</span></div>
@@ -993,7 +1060,7 @@
   }
   // ----- v1.5: win rate by turn position + turn-1 Sol Ring. Only games saved with that data count (older ones lack it).
   function turnStatsHtml(games, countP, meMode) {
-    const posGames = games.filter(hasTurnPos); const solGames = games.filter(hasSolRing);
+    let posGames = games.filter(hasTurnPos); const solGames = games.filter(hasSolRing);
     if (!posGames.length && !solGames.length) {
       return `<section class="card new-card"><div class="card-title"><span><span class="ct-ico">${I.play}</span>Turn order &amp; Sol Ring</span></div>
         <p class="muted small">On the End game screen, pick who went first and tick any turn-1 Sol Rings. Win rate by turn position and Sol Ring stats show up here from your next saved game. Games saved before this update aren’t counted.</p></section>`;
@@ -1008,6 +1075,13 @@
     let html = '';
     // --- win rate by turn position
     if (posGames.length) {
+      // v1.7 bracket filter: games whose whole pod had one bracket (B1..B5) or mixed brackets. Games with a player
+      // without a bracket only show under "Any".
+      const podOf = (g) => { const pb = podBracket(g.players); return pb && pb.all ? (pb.lo === pb.hi ? pb.lo : 'mixed') : null; };
+      const brOpts = [1, 2, 3, 4, 5].filter((b) => posGames.some((g) => podOf(g) === b)).concat(posGames.some((g) => podOf(g) === 'mixed') ? ['mixed'] : []);
+      const brSel = brOpts.includes(posBr) ? posBr : 'any';
+      const posAll = posGames;
+      if (brSel !== 'any') posGames = posGames.filter((g) => podOf(g) === brSel);
       const count = (n) => posGames.filter((g) => g.players.length === n).length;
       const sizes = [...new Set(posGames.map((g) => g.players.length))].sort((a, b) => a - b);
       const defSize = sizes.slice().sort((a, b) => count(b) - count(a) || Math.abs(a - 4) - Math.abs(b - 4))[0];
@@ -1029,6 +1103,7 @@
       const base = Math.min(100, Math.round(100 / (size === 'all' ? avg : size)));
       const list = [...rows.values()].sort((a, b) => b.g - a.g).slice(0, 12);
       html += `<section class="card pos-card"><div class="card-title"><span><span class="ct-ico">${I.play}</span>Win rate by turn position</span></div>
+        ${brOpts.length ? `<div class="seg small-seg pod-seg br-seg" role="group" aria-label="Bracket"><span class="seg-lbl">Bracket</span><button data-act="posBr" data-v="any" class="${brSel === 'any' ? 'on' : ''}">Any</button>${brOpts.map((b) => `<button data-act="posBr" data-v="${b}" class="${brSel === b ? 'on' : ''}" aria-label="${b === 'mixed' ? 'Mixed brackets' : `Bracket ${b}, ${BR_NAME[b]}`}">${b === 'mixed' ? 'Mixed' : 'B' + b}</button>`).join('')}</div>` : ''}
         ${sizes.length > 1 ? `<div class="seg small-seg pod-seg" role="group" aria-label="Pod size"><span class="seg-lbl">Pod</span>${sizes.map((n) => `<button data-act="posSize" data-v="${n}" class="${size === n ? 'on' : ''}" aria-label="${n} players">${n}p</button>`).join('')}<button data-act="posSize" data-v="all" class="${size === 'all' ? 'on' : ''}">All</button></div>` : `<div class="muted small pod-one">${size}-player games</div>`}
         ${all.map((s, i) => pbar(`${ordinal(i + 1)} to play`, `<span class="pos-badge p${i + 1}">${i + 1}</span>`, s, base, 'pos')).join('')}
         <div class="bar-note">fair share ≈ ${base}%${size === 'all' ? ` (1 in ${avg.toFixed(1)} players)` : ''}</div>
@@ -1036,7 +1111,8 @@
           <div class="xt-head" role="row"><span role="columnheader">${useCmd ? (meMode ? 'My decks' : 'Commander') : 'Player'}</span>${all.map((_, i) => `<span role="columnheader">${ordinal(i + 1)}</span>`).join('')}</div>
           ${list.map((e) => `<div class="xt-row" role="row">${nameCell(e)}${e.pos.map((x) => (x.g ? `<span class="xt-cell" style="--h:${rate(x) / 100}" role="cell" aria-label="${pct(x.w, x.g)}, ${x.w} of ${x.g}"><b>${pct(x.w, x.g)}</b><small>${x.w}/${x.g}</small></span>` : '<span class="xt-cell none" role="cell" aria-label="no games">–</span>')).join('')}</div>`).join('')}
         </div>` : ''}
-        ${note(posGames.length)}
+        ${brSel !== 'any' ? `<p class="stat-note">${posGames.length} game${posGames.length === 1 ? '' : 's'} where ${brSel === 'mixed' ? 'the pod had mixed brackets' : `every player was bracket ${brSel} (${BR_NAME[brSel]})`}.</p>` : ''}
+        ${note(posAll.length)}
       </section>`;
     }
     // --- turn-1 Sol Ring
@@ -1076,6 +1152,78 @@
     }
     return html;
   }
+  // ----- v1.7: Commander Brackets. Each game stores every player's bracket at that moment; games without any are left out.
+  function bracketStatsHtml(games, countP, meMode) {
+    const title = `<div class="card-title"><span><span class="ct-ico br">${I.bracket}</span>Brackets</span>${meMode ? '<span class="muted small">your decks</span>' : ''}</div>`;
+    const bg = games.filter((g) => g.players.some((p) => normBracket(p.bracket)));
+    if (!bg.length) {
+      return `<section class="card new-card br-card">${title}
+        <p class="muted small">Give your decks a Commander Bracket (1 Exhibition, 2 Core, 3 Upgraded, 4 Optimized, 5 cEDH) on the Commanders tab or at game setup. Win rates by bracket show up here from your next saved game. Games without a bracket aren’t counted.</p></section>`;
+    }
+    const cmdKey = (p) => { const label = p.partnerName ? `${p.commanderName} + ${p.partnerName}` : p.commanderName; return p.commanderId || 'name:' + label.toLowerCase(); };
+    const cmdInfo = (p) => { const live = cmdLookup(p.commanderId); return { label: live ? cmdLabel(live) : (p.partnerName ? `${p.commanderName} + ${p.partnerName}` : p.commanderName), colors: live ? live.colors : p.colors || [] }; };
+    const rate = (s) => (s.g ? Math.round((s.w / s.g) * 100) : 0);
+    const tally = (s, p) => { s.g++; if (p.isWinner) s.w++; };
+    const useCmd = meMode || brBy === 'cmds';
+    const rowOf = (map, p) => {
+      if (useCmd && !p.commanderName) return null;
+      const k = useCmd ? cmdKey(p) : pKey(p); let e = map.get(k);
+      if (!e) { const ci = useCmd ? cmdInfo(p) : null; e = { label: ci ? ci.label : pName(p), pips: ci ? ci.colors : null, guest: !useCmd && gm() && !p.userId, g: 0, b: [0, 1, 2, 3, 4, 5].map(() => ({ g: 0, w: 0 })), hi: { g: 0, w: 0 }, lo: { g: 0, w: 0 } }; map.set(k, e); }
+      return e;
+    };
+    // 1) win rate by the player's own bracket (every player entry that had one)
+    const byB = [0, 1, 2, 3, 4, 5].map(() => ({ g: 0, w: 0 })); const rows = new Map(); let seatsN = 0, seatsSum = 0;
+    // 2) the pod: one bracket for everyone vs mixed (only games where every player had a bracket)
+    const pods = { uniform: [0, 0, 0, 0, 0, 0], mixed: 0, full: 0 };
+    const hi = { g: 0, w: 0 }, lo = { g: 0, w: 0 }; let mixN = 0, mixSeats = 0;
+    bg.forEach((g) => {
+      const pb = podBracket(g.players);
+      if (pb.all) { pods.full++; if (pb.lo === pb.hi) pods.uniform[pb.lo]++; else pods.mixed++; }
+      const mixed = pb.all && pb.lo < pb.hi; if (mixed) { mixN++; mixSeats += g.players.length; }
+      g.players.forEach((p) => {
+        const b = normBracket(p.bracket); if (!b || !countP(p)) return;
+        tally(byB[b], p); seatsN++; seatsSum += g.players.length;
+        const e = rowOf(rows, p); if (e) { e.g++; tally(e.b[b], p); }
+        if (mixed) {
+          if (b === pb.hi) { tally(hi, p); if (e) tally(e.hi, p); }
+          if (b === pb.lo) { tally(lo, p); if (e) tally(e.lo, p); }
+        }
+      });
+    });
+    const present = [1, 2, 3, 4, 5].filter((b) => byB[b].g);
+    const base = Math.min(100, Math.round(100 / (seatsSum / Math.max(1, seatsN))));
+    const mixBase = mixN ? Math.min(100, Math.round(100 / (mixSeats / mixN))) : base;
+    const pbar = (label, pre, st, bs, cls = '') => `<div class="bar-row"><span class="bar-label">${pre}<span class="ellipsis">${label}</span></span><div class="bar ${cls}" style="--base:${bs}%"><i style="width:${rate(st)}%"></i></div><span class="bar-val">${pct(st.w, st.g)}<small>${st.w}/${st.g}</small></span></div>`;
+    const nameCell = (e) => `<span class="xt-name">${e.pips != null ? `<span class="pips">${pips(e.pips)}</span>` : ''}<span class="ellipsis">${esc(e.label)}${e.guest ? ' <span class="guest-tag">Guest</span>' : ''}</span></span>`;
+    const cell = (x) => (x.g ? `<span class="xt-cell" style="--h:${rate(x) / 100}" role="cell" aria-label="${pct(x.w, x.g)}, ${x.w} of ${x.g}"><b>${pct(x.w, x.g)}</b><small>${x.w}/${x.g}</small></span>` : '<span class="xt-cell none" role="cell" aria-label="no games">–</span>');
+    const list = [...rows.values()].filter((e) => e.g).sort((a, b) => b.g - a.g).slice(0, 12);
+    const seg = meMode ? '' : `<div class="seg small-seg sub-seg">${[['players', 'Players'], ['cmds', 'Commanders']].map(([k, l]) => `<button data-act="brBy" data-v="${k}" class="${brBy === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+    const who = useCmd ? (meMode ? 'My decks' : 'Commander') : 'Player';
+    const hlList = list.filter((e) => e.hi.g || e.lo.g);
+    const podTop = [1, 2, 3, 4, 5].filter((b) => pods.uniform[b]).sort((a, b) => pods.uniform[b] - pods.uniform[a])[0];
+    return `<section class="card br-card">${title}
+      <div class="mini-stats br-mini">
+        <div><b>${bg.length}</b><span>game${bg.length === 1 ? '' : 's'} with brackets</span></div>
+        <div><b>${podTop ? 'B' + podTop : '—'}</b><span>${podTop ? `most common pod (${pods.uniform[podTop]})` : 'no single-bracket pods'}</span></div>
+        <div><b>${pods.full ? pct(pods.mixed, pods.full) : '—'}</b><span>mixed pods${pods.full ? ` (${pods.mixed}/${pods.full})` : ''}</span></div>
+      </div>
+      <div class="sec-title">Win rate by bracket</div>
+      ${present.map((b) => pbar(BR_NAME[b], `<span class="br-badge b${b}">${b}</span>`, byB[b], base, 'br b' + b)).join('')}
+      <div class="bar-note">fair share ≈ ${base}% (1 in ${(seatsSum / Math.max(1, seatsN)).toFixed(1)} players)</div>
+      ${list.length ? `${seg}<div class="xtable br-t" style="--cols:${present.length}" role="table" aria-label="Win rate by bracket, ${useCmd ? 'per commander' : 'per player'}">
+        <div class="xt-head" role="row"><span role="columnheader">${who}</span>${present.map((b) => `<span role="columnheader" aria-label="Bracket ${b}">B${b}</span>`).join('')}</div>
+        ${list.map((e) => `<div class="xt-row" role="row">${nameCell(e)}${present.map((b) => cell(e.b[b])).join('')}</div>`).join('')}
+      </div>` : ''}
+      <div class="sec-title">Highest / lowest bracket at the table</div>
+      ${mixN ? `${pbar('Highest bracket at the table', `<span class="hl-ico up">${I.up}</span>`, hi, mixBase, 'br-hi')}${pbar('Lowest bracket at the table', `<span class="hl-ico down">${I.down}</span>`, lo, mixBase, 'br-lo')}
+        <div class="bar-note">${mixN} mixed-bracket game${mixN === 1 ? '' : 's'} · fair share ≈ ${mixBase}%</div>
+        ${hlList.length ? `<div class="xtable br-hl" role="table" aria-label="Win rate as highest and lowest bracket, ${useCmd ? 'per commander' : 'per player'}">
+          <div class="xt-head" role="row"><span role="columnheader">${who}</span><span role="columnheader">Highest</span><span role="columnheader">Lowest</span></div>
+          ${hlList.map((e) => `<div class="xt-row" role="row">${nameCell(e)}${cell(e.hi)}${cell(e.lo)}</div>`).join('')}
+        </div>` : ''}` : '<p class="muted small">No mixed-bracket games yet: this needs games where every player had a bracket and they weren’t all the same.</p>'}
+      <p class="stat-note">Based on ${bg.length} of ${games.length} game${games.length === 1 ? '' : 's'}${bg.length < games.length ? ' — games without a bracket aren’t counted' : ''}. Highest / lowest uses only mixed-bracket games where every player had a bracket.</p>
+    </section>`;
+  }
   let histLimit = 50; // History renders in batches ("Show more") so thousands of games stay fast
   function renderHistory(v) {
     const all = allGames(); const games = all.slice(0, histLimit); const more = all.length - games.length; const myId = me() ? me().id : null;
@@ -1084,11 +1232,13 @@
       ${games.length ? games.map((g) => {
         const ps = g.players.slice().sort((a, b) => (a.place || 99) - (b.place || 99));
         const w = g.winnerIndex != null ? g.players[g.winnerIndex] : null;
-        return `<div class="card game-card"><div class="gc-head"><div><b class="gc-date">${fmtDate(g.endedAt)}</b> <span class="muted small">${fmtTime(g.startedAt)}</span><div class="gc-meta"><span>${I.users}${g.playerCount} players</span><span>${I.clock}${fmtDur(g.durationMs)}</span>${g.turns ? `<span>${I.turns}${g.turns} turns</span>` : ''}<span>${I.heart}${g.startingLife} life</span></div>
+        const pb = podBracket(g.players);
+        const brMeta = pb ? `<span class="gbr ${pb.lo === pb.hi ? 'b' + pb.lo : 'mixed'}" role="img" aria-label="${pb.lo === pb.hi ? `Bracket ${pb.lo}, ${BR_NAME[pb.lo]}` : `Mixed brackets ${pb.lo} to ${pb.hi}`}${pb.all ? '' : ` (${pb.known} of ${pb.n} players set)`}">${I.bracket}${podLabel(pb)}${pb.lo === pb.hi ? ` <span class="gbr-n">${BR_NAME[pb.lo]}</span>` : ''}${pb.all ? '' : ` <small>${pb.known}/${pb.n}</small>`}</span>` : '';
+        return `<div class="card game-card"><div class="gc-head"><div><b class="gc-date">${fmtDate(g.endedAt)}</b> <span class="muted small">${fmtTime(g.startedAt)}</span><div class="gc-meta"><span>${I.users}${g.playerCount} players</span><span>${I.clock}${fmtDur(g.durationMs)}</span>${g.turns ? `<span>${I.turns}${g.turns} turns</span>` : ''}<span>${I.heart}${g.startingLife} life</span>${brMeta}</div>
           ${gm() ? `<div class="muted small">${cloud.isPending(g.id) ? '<span class="pend-badge">⟳ waiting to sync</span> ' : ''}${recName(g) ? 'recorded by ' + esc(recName(g)) : ''}</div>` : ''}</div>
           ${!gm() || g.recordedBy === myId ? `<button class="icon-btn danger" data-act="deleteGame" data-id="${g.id}" aria-label="Delete game">${I.trash}</button>` : ''}</div>
           <div class="gc-winner ${w ? '' : 'draw'}">${w ? `${I.trophy}<b>${esc(pName(w))}</b>${w.commanderName ? `<span class="ellipsis muted"><span class="pips">${pips(w.colors)}</span> ${esc(w.commanderName)}</span>` : ''}` : `${I.flag}<b>Draw</b>`}</div>
-          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis">${p.seat != null ? `<span class="seat-dot sm seat-${p.seat % 6}"></span>` : ''}<b>${esc(pName(p))}</b>${gm() && !p.userId ? ' <span class="guest-tag">Guest</span>' : ''} ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="gc-tail muted small nowrap">${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${Number.isInteger(p.turnPos) ? `<span class="tp-badge" role="img" aria-label="${ordinal(p.turnPos)} to play" title="${ordinal(p.turnPos)} to play">${I.play}${p.turnPos}</span>` : p.wentFirst ? ' · went 1st' : ''}${p.solRingT1 ? `<span class="sr-badge" role="img" aria-label="Turn 1 Sol Ring" title="Turn 1 Sol Ring">${I.solring}</span>` : ''}</span></div>`).join('')}</div></div>`;
+          <div class="gc-players">${ps.map((p) => `<div class="gc-p ${p.isWinner ? 'win' : ''}"><span class="gc-place">${p.place ? ordinal(p.place) : ''}</span><span class="ellipsis">${p.seat != null ? `<span class="seat-dot sm seat-${p.seat % 6}"></span>` : ''}<b>${esc(pName(p))}</b>${gm() && !p.userId ? ' <span class="guest-tag">Guest</span>' : ''} ${p.commanderName ? '· ' + esc(p.commanderName) : ''}</span><span class="gc-tail muted small nowrap">${brBadge(p.bracket)}${p.eliminated ? REASON[p.elimReason] : p.finalLife + ' ♥'}${Number.isInteger(p.turnPos) ? `<span class="tp-badge" role="img" aria-label="${ordinal(p.turnPos)} to play" title="${ordinal(p.turnPos)} to play">${I.play}${p.turnPos}</span>` : p.wentFirst ? ' · went 1st' : ''}${p.solRingT1 ? `<span class="sr-badge" role="img" aria-label="Turn 1 Sol Ring" title="Turn 1 Sol Ring">${I.solring}</span>` : ''}</span></div>`).join('')}</div></div>`;
       }).join('') : groupLoading() ? skeleton('history') : `<div class="empty"><div class="empty-ico">${I.history}</div><p>No games yet.</p><p class="muted small">Saved games appear here. You can delete a wrong entry anytime.</p><button class="btn primary" data-act="goPlay">${I.play}Start a game</button></div>`}
       ${more > 0 ? `<button class="btn ghost block more-hist" data-act="moreHistory">Show more <span class="muted">· ${more} older game${more === 1 ? '' : 's'}</span></button>` : ''}`;
   }
@@ -1177,7 +1327,7 @@
   function deckById(id) { return gm() && id ? cd().decks.find((d) => d.id === id) || null : null; }
   // commander info by id: group deck (online) or local commander
   function cmdLookup(id) {
-    const d = deckById(id); if (d) return { name: d.commander, partner: d.partner || '', colors: d.colors || [], deckName: d.name || '', ownerId: d.owner_id };
+    const d = deckById(id); if (d) return { name: d.commander, partner: d.partner || '', colors: d.colors || [], deckName: d.name || '', ownerId: d.owner_id, bracket: normBracket(d.bracket) };
     return getCmd(id);
   }
   function pName(p) { const m = memberById(p.userId); return m ? m.display_name : p.name; }
@@ -1475,7 +1625,7 @@
           const existing = cd().decks.filter((d) => d.owner_id === u.id);
           for (const c of mine()) {
             const same = existing.find((d) => d.commander.toLowerCase() === c.name.toLowerCase() && (d.partner || '').toLowerCase() === (c.partner || '').toLowerCase());
-            deckMap[c.id] = same ? same.id : (await cloud.saveDeck({ commander: c.name, partner: c.partner, colors: c.colors })).id;
+            deckMap[c.id] = same ? same.id : (await cloud.saveDeck({ commander: c.name, partner: c.partner, colors: c.colors, bracket: normBracket(c.bracket) })).id;
           }
         }
         let n = 0;
@@ -1518,7 +1668,7 @@
     cd().games.forEach((g) => g.players.forEach((p) => {
       if (p.kind === 'guest' && p.name.trim().toLowerCase() === k && p.commanderName) {
         const key = (p.commanderName + '|' + (p.partnerName || '')).toLowerCase();
-        if (!out.has(key)) out.set(key, { name: p.commanderName, partner: p.partnerName || '', colors: p.colors || [] });
+        if (!out.has(key)) out.set(key, { name: p.commanderName, partner: p.partnerName || '', colors: p.colors || [], bracket: normBracket(p.bracket) });
       }
     }));
     return [...out.values()];
@@ -1534,13 +1684,42 @@
   function seatSummary(seat) {
     if (seat.kind === 'member') {
       const m = memberById(seat.userId); const d = deckById(seat.deckId);
-      return { player: m ? `${dot(m.color)}<span class="ellipsis">${esc(m.display_name)}</span>` : '', deck: d ? `<span class="pips">${pips(d.colors)}</span><span class="ellipsis">${esc(deckLabel(d))}</span>` : '' };
+      return { player: m ? `${dot(m.color)}<span class="ellipsis">${esc(m.display_name)}</span>` : '', deck: d ? `<span class="pips">${pips(d.colors)}</span><span class="ellipsis">${esc(deckLabel(d))}</span>` : '', what: d ? deckLabel(d) : '', bracket: d ? seatBracket(seat) : null };
     }
     if (seat.kind === 'guest') {
       const c = seat.commander;
-      return { player: `<span class="guest-tag">Guest</span><span class="ellipsis">${esc(seat.name)}</span>`, deck: c && c.name ? `<span class="pips">${pips(c.colors)}</span><span class="ellipsis">${esc(c.partner ? `${c.name} + ${c.partner}` : c.name)}</span>` : '' };
+      return { player: `<span class="guest-tag">Guest</span><span class="ellipsis">${esc(seat.name)}</span>`, deck: c && c.name ? `<span class="pips">${pips(c.colors)}</span><span class="ellipsis">${esc(c.partner ? `${c.name} + ${c.partner}` : c.name)}</span>` : '', what: c && c.name ? c.name : '', bracket: c && c.name ? normBracket(c.bracket) : null };
     }
     return { player: '', deck: '' };
+  }
+  // group seat bracket: a per-seat override (someone else's deck, or offline) wins over the deck's own bracket
+  function seatBracket(seat) {
+    if (seat.kind === 'member') { const d = deckById(seat.deckId); return normBracket(seat.bracket) || (d ? normBracket(d.bracket) : null); }
+    if (seat.kind === 'guest') return seat.commander ? normBracket(seat.commander.bracket) : null;
+    return null;
+  }
+  function openGroupSeatBracket(i) {
+    const seat = groupSeats()[i]; const sum = seatSummary(seat); if (!sum.what) return;
+    const d = seat.kind === 'member' ? deckById(seat.deckId) : null; const own = d && d.owner_id === me().id;
+    const owner = d ? memberById(d.owner_id) : null;
+    const where = seat.kind === 'guest' ? `Saved with ${esc(seat.name)}'s commander and remembered for their next games.`
+      : own ? 'Saved on your deck for the whole group (needs a connection; offline it applies to the next game only).'
+        : `Applies to the next game only. ${esc(owner ? owner.display_name : 'The owner')} sets the deck's own bracket in their app${d && normBracket(d.bracket) ? ` (currently ${d.bracket} · ${BR_NAME[d.bracket]})` : ''}.`;
+    const ov = openSheet(`<div class="sheet-head"><div><h2>Bracket</h2><div class="muted small ellipsis">${sum.deck}</div></div><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+      <div class="sheet-body">${bracketPicker(seatBracket(seat))}<p class="hint">${where}</p><button class="btn primary block" data-close>Done</button></div>`, { onClose: () => renderTab() });
+    let busy = false;
+    bindBracketPicker(ov, () => seatBracket(seat), (v) => {
+      if (busy) return false;
+      if (seat.kind === 'guest') { seat.commander = { ...seat.commander, bracket: v }; save(); return true; }
+      if (own && cloud.online()) {
+        busy = true; delete seat.bracket; save();
+        cloud.saveDeck({ id: d.id, commander: d.commander, partner: d.partner || '', name: d.name || '', colors: d.colors || [], bracket: v })
+          .then(() => toast('Deck bracket saved'), (x) => { seat.bracket = v; save(); toast(`${x.message} Using it for the next game only.`); })
+          .finally(() => { busy = false; });
+        return true;
+      }
+      if (v == null) delete seat.bracket; else seat.bracket = v; save(); return true;
+    });
   }
   function renderGroupPlay(v) {
     const s = getSetup(); const seats = groupSeats(); const g = data.current; const grp = cloud.group();
@@ -1561,7 +1740,8 @@
         return `<div class="seat-row group-seat" data-seat="${i}"><span class="seat-dot seat-${i}">${i + 1}</span>
           <div class="seat-fields">
             <button class="cmd-pick ${sum.player ? '' : 'empty'}" data-act="pickSeatPlayer" data-i="${i}">${sum.player || '<span>Choose player…</span>'}</button>
-            <button class="cmd-pick ${sum.deck ? '' : 'empty'}" data-act="pickSeatDeck" data-i="${i}" ${seat.kind ? '' : 'disabled'}>${sum.deck || `<span>${seat.kind === 'guest' ? 'Commander they play…' : 'Choose deck…'}</span>`}</button>
+            <div class="cmd-line"><button class="cmd-pick ${sum.deck ? '' : 'empty'}" data-act="pickSeatDeck" data-i="${i}" ${seat.kind ? '' : 'disabled'}>${sum.deck || `<span>${seat.kind === 'guest' ? 'Commander they play…' : 'Choose deck…'}</span>`}</button>
+              ${sum.what ? seatBrBtn(i, sum.bracket, sum.what) : ''}</div>
           </div></div>`;
       }).join('')}
     </section>
@@ -1592,8 +1772,8 @@
       const m = e.target.closest('[data-member]');
       if (m) {
         const decks = cd().decks.filter((d) => d.owner_id === m.dataset.member);
-        const keep = seats[i].userId === m.dataset.member ? seats[i].deckId : null;
-        seats[i] = { kind: 'member', userId: m.dataset.member, deckId: keep || (decks.length === 1 ? decks[0].id : null) };
+        const same = seats[i].userId === m.dataset.member; const keep = same ? seats[i].deckId : null;
+        seats[i] = { kind: 'member', userId: m.dataset.member, deckId: keep || (decks.length === 1 ? decks[0].id : null), ...(same && keep && normBracket(seats[i].bracket) ? { bracket: seats[i].bracket } : {}) };
         save(); closeOverlay(ov); renderTab();
         if (!seats[i].deckId && decks.length > 1) setTimeout(() => openSeatDeckPicker(i), 250);
         return;
@@ -1612,12 +1792,13 @@
     const ov = openSheet(`<div class="sheet-head"><h2>${esc(m ? m.display_name : 'Player')}'s deck</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body"><div class="pick-list">
         ${mine ? '<button class="pick-row new" data-new>+ New deck</button>' : ''}
-        ${decks.map((d) => `<button class="pick-row ${d.id === seat.deckId ? 'on' : ''}" data-deck="${d.id}"><span class="pips">${pips(d.colors)}</span><span class="pr-main"><b>${esc(deckLabel(d))}</b>${d.name ? `<small>${esc(d.name)}</small>` : ''}</span></button>`).join('')}
+        ${decks.map((d) => `<button class="pick-row ${d.id === seat.deckId ? 'on' : ''}" data-deck="${d.id}"><span class="pips">${pips(d.colors)}</span><span class="pr-main"><b>${esc(deckLabel(d))}</b>${d.name || d.bracket ? `<small class="pr-sub">${bchip(d.bracket)}${d.name ? `<span class="ellipsis">${esc(d.name)}</span>` : ''}</small>` : ''}</span></button>`).join('')}
         ${!decks.length ? `<p class="muted small center">${mine ? 'You have no decks yet.' : 'No decks yet — they can add decks in their own app (Commanders tab).'}</p>` : ''}
         <button class="pick-row clear" data-deck="">No deck</button></div></div>`, { cls: 'tall' });
     ov.addEventListener('click', (e) => {
-      if (e.target.closest('[data-new]')) { closeOverlay(ov); openDeckEditor(null, { onSave: (d) => { seat.deckId = d.id; save(); renderTab(); } }); return; }
+      if (e.target.closest('[data-new]')) { closeOverlay(ov); openDeckEditor(null, { onSave: (d) => { seat.deckId = d.id; delete seat.bracket; save(); renderTab(); } }); return; }
       const b = e.target.closest('[data-deck]'); if (!b) return;
+      if ((b.dataset.deck || null) !== seat.deckId) delete seat.bracket;
       seat.deckId = b.dataset.deck || null; save(); closeOverlay(ov); renderTab();
     });
   }
@@ -1629,14 +1810,14 @@
       <div class="sheet-body"><input type="search" class="search" data-role="q" placeholder="Search or type a commander" aria-label="Search or type a commander" autocomplete="off" autocapitalize="words">
       <div class="pick-list" data-role="list"></div></div>`, { cls: 'tall' });
     const list = ov.querySelector('[data-role=list]');
-    const row = (c, tag) => `<button class="pick-row" data-c="${esc(JSON.stringify(c))}"><span class="pips">${pips(c.colors)}</span><span class="pr-main"><b>${esc(c.partner ? `${c.name} + ${c.partner}` : c.name)}</b>${tag ? `<small>${tag}</small>` : ''}</span></button>`;
+    const row = (c, tag) => `<button class="pick-row" data-c="${esc(JSON.stringify(c))}"><span class="pips">${pips(c.colors)}</span><span class="pr-main"><b>${esc(c.partner ? `${c.name} + ${c.partner}` : c.name)}</b>${tag || c.bracket ? `<small class="pr-sub">${bchip(c.bracket)}${tag ? `<span class="ellipsis">${tag}</span>` : ''}</small>` : ''}</span></button>`;
     const draw = () => {
       const ql = q.trim().toLowerCase(); const f = (c) => !ql || (c.name + ' ' + c.partner).toLowerCase().includes(ql);
       const mineKeys = new Set(theirs.map((c) => (c.name + '|' + c.partner).toLowerCase()));
       const exact = all.some((c) => c.name.toLowerCase() === ql);
       list.innerHTML = `${ql && !exact ? `<button class="pick-row new" data-new>+ Use “${esc(q.trim())}”</button>` : ''}
         ${theirs.filter(f).map((c) => row(c, `played by ${esc(seat.name)} before`)).join('')}
-        ${all.filter((c) => f(c) && !mineKeys.has((c.name + '|' + c.partner).toLowerCase())).map((c) => row(c, '')).join('')}
+        ${all.filter((c) => f(c) && !mineKeys.has((c.name + '|' + c.partner).toLowerCase())).map((c) => row({ name: c.name, partner: c.partner, colors: c.colors }, '')).join('')}
         ${!ql ? '<button class="pick-row new" data-new>+ Other commander</button>' : ''}`;
     };
     ov.querySelector('[data-role=q]').addEventListener('input', (e) => { q = e.target.value; draw(); });
@@ -1648,19 +1829,21 @@
     draw();
   }
   function openGuestCommanderForm(i, name) {
-    const seat = groupSeats()[i]; const st = { colors: [] };
+    const seat = groupSeats()[i]; const st = { colors: [], bracket: null };
     const ov = openSheet(`<div class="sheet-head"><h2>${esc(seat.name)}'s commander</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
         <div class="field"><label>Commander</label><input type="text" data-f="name" value="${esc(name)}" maxlength="80" autocapitalize="words"></div>
         <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" maxlength="80" autocapitalize="words"></div>
         <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="false">${x}</button>`).join('')}</div></div>
+        <div class="field br-field"><label>Commander Bracket <span class="muted">(optional)</span></label>${bracketPicker(null)}</div>
         <button class="btn primary big block" data-a="ok">Use this commander</button></div>`, { cls: 'tall' });
+    bindBracketPicker(ov.querySelector('.br-field'), () => st.bracket, (v) => { st.bracket = v; });
     ov.addEventListener('click', (e) => {
       const t = e.target.closest('[data-color]');
       if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); t.setAttribute('aria-pressed', st.colors.includes(x)); return; }
       if (!e.target.closest('[data-a=ok]')) return;
       const n = ov.querySelector('[data-f=name]').value.trim(); if (!n) { toast('Enter the commander name'); return; }
-      seat.commander = { name: n, partner: ov.querySelector('[data-f=partner]').value.trim(), colors: st.colors };
+      seat.commander = { name: n, partner: ov.querySelector('[data-f=partner]').value.trim(), colors: st.colors, bracket: st.bracket };
       save(); closeOverlay(ov); renderTab();
     });
   }
@@ -1672,13 +1855,13 @@
       const base = { id: 'p' + i, seat: i, life: s.life, poison: 0, cmd: {}, tax: [0, 0], eliminated: false, elimOrder: null, elimReason: null, killedBy: null };
       if (seat.kind === 'member') {
         const m = memberById(seat.userId); const d = deckById(seat.deckId);
-        return { ...base, kind: 'member', userId: seat.userId, name: m ? m.display_name : 'Player ' + (i + 1), deckId: d ? d.id : null, commanderId: d ? d.id : null, commanderName: d ? d.commander : '', partnerName: d ? d.partner || '' : '', colors: d ? d.colors.slice() : [] };
+        return { ...base, kind: 'member', userId: seat.userId, name: m ? m.display_name : 'Player ' + (i + 1), deckId: d ? d.id : null, commanderId: d ? d.id : null, commanderName: d ? d.commander : '', partnerName: d ? d.partner || '' : '', colors: d ? d.colors.slice() : [], bracket: d ? seatBracket(seat) : null };
       }
       if (seat.kind === 'guest') {
         const c = seat.commander || {}; const known = knownGuests().find((x) => x.name.toLowerCase() === seat.name.toLowerCase());
-        return { ...base, kind: 'guest', guestId: known ? known.id : null, name: seat.name, commanderId: null, commanderName: c.name || '', partnerName: c.partner || '', colors: c.colors || [] };
+        return { ...base, kind: 'guest', guestId: known ? known.id : null, name: seat.name, commanderId: null, commanderName: c.name || '', partnerName: c.partner || '', colors: c.colors || [], bracket: c.name ? normBracket(c.bracket) : null };
       }
-      return { ...base, kind: 'guest', guestId: null, name: `Player ${i + 1}`, commanderId: null, commanderName: '', partnerName: '', colors: [] };
+      return { ...base, kind: 'guest', guestId: null, name: `Player ${i + 1}`, commanderId: null, commanderName: '', partnerName: '', colors: [], bracket: null };
     });
   }
 
@@ -1686,7 +1869,7 @@
   function renderDecks(v) {
     const u = me(); const stats = commanderStats(); const empty = { games: 0, wins: 0, dur: 0, last: 0, kills: 0 };
     const card = (d, editable) => { const s = stats.get(d.id) || empty; return `<button class="cmd-card" ${editable ? `data-act="editDeck" data-id="${d.id}"` : 'disabled'} style="--deck:${manaGrad(d.colors)}">
-      <div class="cc-top"><div class="cc-name"><b>${esc(d.commander)}</b>${d.partner ? `<small>+ ${esc(d.partner)}</small>` : ''}<span class="cc-meta"><span class="pips" aria-label="${colorWords(d.colors)}" role="img">${pips(d.colors)}</span>${d.name ? `<small class="owner">${esc(d.name)}</small>` : ''}</span></div>
+      <div class="cc-top"><div class="cc-name"><b>${esc(d.commander)}</b>${d.partner ? `<small>+ ${esc(d.partner)}</small>` : ''}<span class="cc-meta"><span class="pips" aria-label="${colorWords(d.colors)}" role="img">${pips(d.colors)}</span>${bchip(d.bracket)}${d.name ? `<small class="owner">${esc(d.name)}</small>` : ''}</span></div>
       ${wrRing(s)}</div>
       <div class="cc-stats"><span><b>${s.games}</b> game${s.games === 1 ? '' : 's'}</span><span><b>${s.wins}</b> win${s.wins === 1 ? '' : 's'}</span><span><b>${s.games ? fmtDur(s.dur / s.games) : '—'}</b> avg</span>${s.kills ? `<span><b>${s.kills}</b> cmdr kills</span>` : ''}<span>${s.last ? 'Last ' + fmtShort(s.last) : 'Never played'}</span></div></button>`; };
     const decks = cd().decks; const myDecks = decks.filter((d) => d.owner_id === u.id);
@@ -1707,7 +1890,7 @@
   function openDeckEditor(id, opts = {}) {
     if (!cloud.online()) { toast('Connect to the internet to edit decks'); return; }
     const d = id ? deckById(id) : null;
-    const st = { colors: d ? d.colors.slice() : [] };
+    const st = { colors: d ? d.colors.slice() : [], bracket: d ? normBracket(d.bracket) : null };
     const s = d ? commanderStats().get(d.id) : null;
     const ov = openSheet(`<div class="sheet-head"><h2>${d ? 'Edit deck' : 'New deck'}</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
@@ -1715,9 +1898,11 @@
         <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" value="${esc(d ? d.partner || '' : '')}" maxlength="80" autocapitalize="words"></div>
         <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="${st.colors.includes(x)}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
         <div class="field"><label>Deck name <span class="muted">(optional)</span></label><input type="text" data-f="name" value="${esc(d ? d.name || '' : '')}" maxlength="60" placeholder="e.g. Superfriends"></div>
+        <div class="field br-field"><label>Commander Bracket <span class="muted">(optional)</span></label>${bracketPicker(st.bracket)}</div>
         ${s ? `<div class="mini-stats"><div><b>${s.games}</b><span>games</span></div><div><b>${s.wins}</b><span>wins</span></div><div><b>${pct(s.wins, s.games)}</b><span>win rate</span></div><div><b>${fmtDur(s.dur / s.games)}</b><span>avg game</span></div></div>${cmdTurnHtml(s)}` : ''}
         <div class="sheet-actions">${d ? '<button class="btn danger-text" data-a="delete">Delete</button>' : ''}<button class="btn primary grow" data-a="save">${d ? 'Save' : 'Add deck'}</button></div>
       </div>`, { cls: 'tall' });
+    bindBracketPicker(ov.querySelector('.br-field'), () => st.bracket, (v) => { st.bracket = v; });
     ov.addEventListener('click', async (e) => {
       const t = e.target.closest('[data-color]');
       if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); t.setAttribute('aria-pressed', st.colors.includes(x)); return; }
@@ -1727,7 +1912,7 @@
           const f = (k) => ov.querySelector(`[data-f=${k}]`).value.trim();
           if (!f('commander')) { toast('Enter the commander name'); return; }
           a.disabled = true;
-          const saved = await cloud.saveDeck({ id: d && d.id, commander: f('commander'), partner: f('partner'), name: f('name'), colors: st.colors });
+          const saved = await cloud.saveDeck({ id: d && d.id, commander: f('commander'), partner: f('partner'), name: f('name'), colors: st.colors, bracket: st.bracket });
           closeOverlay(ov); toast(d ? 'Deck saved' : 'Deck added');
           if (opts.onSave) opts.onSave(saved); else renderTab();
         } else if (a.dataset.a === 'delete') {
@@ -1744,6 +1929,7 @@
     setCount: (el) => { getSetup().count = +el.dataset.v; save(); renderTab(); },
     setLife: (el) => { getSetup().life = +el.dataset.v; save(); renderTab(); },
     pickCmd: (el) => openCmdPicker(+el.dataset.i),
+    seatBracket: (el) => openSeatBracket(+el.dataset.i),
     startGame: () => startGame(),
     resumeGame: () => openGame(),
     discardGame: async () => { if (await confirmDialog('Discard the game in progress?', 'Discard', true)) { data.current = null; save(true); renderTab(); } },
@@ -1776,6 +1962,8 @@
     posSize: (el) => { posSize = el.dataset.v === 'all' ? 'all' : +el.dataset.v; renderTab(); },
     posBy: (el) => { posBy = el.dataset.v; renderTab(); },
     solBy: (el) => { solBy = el.dataset.v; renderTab(); },
+    posBr: (el) => { posBr = el.dataset.v === 'any' || el.dataset.v === 'mixed' ? el.dataset.v : +el.dataset.v; renderTab(); },
+    brBy: (el) => { brBy = el.dataset.v; renderTab(); },
     newDeck: () => openDeckEditor(null),
     editDeck: (el) => openDeckEditor(el.dataset.id),
     syncNow: async () => {
