@@ -273,6 +273,12 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 
 /* ---------- game board ---------- */
 #game { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); background: #07060f; z-index: 10; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+/* v1.6.1: safe-area insets in board coordinates (top/right/bottom/left of the board, wherever that is on the screen) */
+#game { --bt: var(--sat); --br: var(--sar); --bb: var(--sab); --bl: var(--sal); }
+/* upright screen + wide layout: the whole game layer is turned 90° clockwise. It is the painted height wide and the screen
+   width tall, so the board's top edge is the screen's right edge and its left edge the screen's top (notch) edge. */
+#game.rot90 { right: auto; width: var(--app-h, 100dvh); height: var(--app-w, 100vw); transform-origin: 0 0; transform: translateX(var(--app-w, 100vw)) rotate(90deg);
+  --bt: var(--sar); --br: var(--sab); --bb: var(--sal); --bl: var(--sat); }
 #board {
   position: absolute; inset: 0; display: grid; gap: 4px; touch-action: none; padding: 0; /* edge to edge: safe areas are inner panel padding */
 }

@@ -2,18 +2,28 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.6.0';
+  const APP_VERSION = '1.6.1';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
   const LIFE_PRESETS = [20, 25, 30, 40];
-  // [row, col, colSpan, rotation] per seat, seats listed clockwise around the table
-  const LAYOUTS = {
+  // [row, col, colSpan, rotation] per seat, seats listed clockwise around the table.
+  // TALL: an upright screen with the wide layout switched off (players along the long left/right edges).
+  const TALL_LAYOUTS = {
     2: { rows: 2, cols: 1, seats: [[1, 1, 1, 180], [2, 1, 1, 0]] },
     3: { rows: 2, cols: 2, seats: [[1, 1, 2, 180], [2, 2, 1, -90], [2, 1, 1, 90]] },
     4: { rows: 2, cols: 2, seats: [[1, 1, 1, 90], [1, 2, 1, -90], [2, 2, 1, -90], [2, 1, 1, 90]] },
     5: { rows: 3, cols: 2, seats: [[1, 1, 2, 180], [2, 2, 1, -90], [3, 2, 1, -90], [3, 1, 1, 90], [2, 1, 1, 90]] },
     6: { rows: 3, cols: 2, seats: [[1, 1, 1, 90], [1, 2, 1, -90], [2, 2, 1, -90], [3, 2, 1, -90], [3, 1, 1, 90], [2, 1, 1, 90]] },
+  };
+  // WIDE (v1.6.1): a landscape screen, or an upright phone showing the game turned 90°. Players sit along the two long
+  // sides: the top row faces the top edge (180°), the bottom row the bottom edge (0°). 5 players = 3 on top, 2 below.
+  const WIDE_LAYOUTS = {
+    2: { rows: 2, cols: 1, seats: [[1, 1, 1, 180], [2, 1, 1, 0]] },
+    3: { rows: 2, cols: 2, seats: [[1, 1, 2, 180], [2, 2, 1, 0], [2, 1, 1, 0]] },
+    4: { rows: 2, cols: 2, seats: [[1, 1, 1, 180], [1, 2, 1, 180], [2, 2, 1, 0], [2, 1, 1, 0]] },
+    5: { rows: 2, cols: 6, seats: [[1, 1, 2, 180], [1, 3, 2, 180], [1, 5, 2, 180], [2, 4, 3, 0], [2, 1, 3, 0]] },
+    6: { rows: 2, cols: 3, seats: [[1, 1, 1, 180], [1, 2, 1, 180], [1, 3, 1, 180], [2, 3, 1, 0], [2, 2, 1, 0], [2, 1, 1, 0]] },
   };
   const I = {
     close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
@@ -393,9 +403,32 @@
     els.forEach((el) => { el.classList.add('out'); setTimeout(() => el.remove(), 400); });
     const sr = $('#tap-hint-sr'); if (sr) sr.remove();
   }
+  // v1.6.1: wide layout everywhere. iOS Home Screen apps ignore the manifest orientation, so on an upright screen the whole
+  // game layer is turned 90° (CSS, #game.rot90) unless switched off in Settings (a per-device key, not part of the saved data).
+  const WIDE_KEY = 'edh-tracker:wideLayout';
+  const forceWide = () => { try { return localStorage.getItem(WIDE_KEY) !== '0'; } catch (e) { return true; } };
+  function boardMode() {
+    const portrait = window.innerHeight > window.innerWidth;
+    if (!portrait) return { wide: true, rot: 0, key: 'wide' };
+    return forceWide() ? { wide: true, rot: 90, key: 'wide90' } : { wide: false, rot: 0, key: 'tall' };
+  }
+  let boardKey = '';
+  const normRot = (r) => { const x = ((r % 360) + 360) % 360; return x > 180 ? x - 360 : x; }; // -> -90, 0, 90, 180
+  // how a player's panel is turned on the physical screen (panel rotation + board rotation): their sheets face them too
+  const seatRot = (pid) => { const el = panelEl(pid); return el ? normRot(+(el.dataset.rot || 0) + (boardKey === 'wide90' ? 90 : 0)) : 0; };
+  function onBoardResize() {
+    if (!data.current || $('#game').hidden || !$('#board')) return;
+    const a = document.activeElement; if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return; // on-screen keyboard, not a rotation
+    if (boardMode().key === boardKey) return;
+    renderGame();
+    $$('.overlay').forEach((ov) => { if (!ov._pid) return; const fr = ov.querySelector('.rot-frame'); const r = seatRot(ov._pid); fr.style.setProperty('--rot', r + 'deg'); fr.classList.toggle('side', Math.abs(r) === 90); });
+  }
+  window.addEventListener('resize', onBoardResize);
+  window.addEventListener('orientationchange', () => setTimeout(onBoardResize, 300));
   function renderGame() {
-    const g = G(); const L = LAYOUTS[g.players.length]; const hint = !hintSeen();
-    $('#game').innerHTML = `<div id="board" class="n${g.players.length}" style="grid-template-rows:repeat(${L.rows},1fr);grid-template-columns:repeat(${L.cols},1fr)">
+    const g = G(); const M = boardMode(); const L = (M.wide ? WIDE_LAYOUTS : TALL_LAYOUTS)[g.players.length]; const hint = !hintSeen();
+    boardKey = M.key; $('#game').classList.toggle('rot90', M.rot === 90); $('#game').dataset.layout = M.key;
+    $('#game').innerHTML = `<div id="board" class="n${g.players.length} ${M.wide ? 'wide' : 'tall'}" style="grid-template-rows:repeat(${L.rows},1fr);grid-template-columns:repeat(${L.cols},1fr)">
       ${g.players.map((p, i) => {
         const [r, c, span, rot] = L.seats[i];
         return `<div class="cell" style="grid-area:${r}/${c}/span 1/span ${span}"><div class="panel seat-${p.seat} ${Math.abs(rot) === 90 ? 'side' : ''} ${nearClass(L, r, c, span, rot)}" style="--rot:${rot}deg;${safePad(L, r, c, span, rot)}" data-pid="${p.id}" data-rot="${rot}">
@@ -426,7 +459,7 @@
   }
   // Safe-area insets become inner padding, mapped from screen edges to the panel's own (rotated) edges
   function safePad(L, r, c, span, rot) {
-    const scr = { t: r === 1 ? 'var(--sat)' : '0px', b: r === L.rows ? 'var(--sab)' : '0px', l: c === 1 ? 'var(--sal)' : '0px', r: c - 1 + span === L.cols ? 'var(--sar)' : '0px' };
+    const scr = { t: r === 1 ? 'var(--bt)' : '0px', b: r === L.rows ? 'var(--bb)' : '0px', l: c === 1 ? 'var(--bl)' : '0px', r: c - 1 + span === L.cols ? 'var(--br)' : '0px' };
     // player edge <- screen edge
     const map = rot === 90 ? { t: 'r', r: 'b', b: 'l', l: 't' } : rot === -90 ? { t: 'l', r: 't', b: 'r', l: 'b' } : rot === 180 ? { t: 'b', r: 'l', b: 't', l: 'r' } : { t: 't', r: 'r', b: 'b', l: 'l' };
     return `--pt:${scr[map.t]};--pr:${scr[map.r]};--pb:${scr[map.b]};--pl:${scr[map.l]}`;
@@ -592,10 +625,11 @@
   }
 
   function openPlayerSheet(pid) {
-    const g = G(); const p = P(pid); const rot = +(panelEl(pid).dataset.rot || 0);
+    const g = G(); const p = P(pid); const rot = seatRot(pid);
     const ov = openSheet(`<div class="sheet-head"><div class="sh-l"><span class="seat-dot seat-${p.seat}"></span><div class="sh-t"><h2>${esc(p.name)}</h2><div class="muted small ellipsis">${p.commanderName ? `<span class="pips">${pips(p.colors)}</span> ${esc(p.commanderName)}${p.partnerName ? ' + ' + esc(p.partnerName) : ''}` : 'No commander'}</div></div></div>
       <div class="sh-life"><span data-role="life"></span><small>life</small></div><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body" data-role="body"></div>`, { rot, cls: 'player-sheet' });
+    ov._pid = pid;
     const body = ov.querySelector('[data-role=body]');
     const draw = () => { body.innerHTML = playerSheetBody(p); ov.querySelector('[data-role=life]').textContent = p.life; };
     ov._refresh = draw;
@@ -1076,6 +1110,7 @@
         <label class="switch-row"><span>Keep screen awake during games${'wakeLock' in navigator ? '' : ' <small class="muted">(not supported here)</small>'}</span><input type="checkbox" data-bind="wakeLock" ${s.wakeLock ? 'checked' : ''}><i class="switch"></i></label>
         <label class="switch-row"><span>Random first player at start</span><input type="checkbox" data-bind="randomFirst" ${s.randomFirst ? 'checked' : ''}><i class="switch"></i></label>
         <label class="switch-row"><span>Slowly rotate the centre timer <small class="muted">(so every seat can read it)</small></span><input type="checkbox" data-bind="spinClock" ${s.spinClock !== false ? 'checked' : ''}><i class="switch"></i></label>
+        <label class="switch-row"><span>Wide game layout on an upright phone <small class="muted">(the game turns sideways so players sit along the long sides; this device)</small></span><input type="checkbox" data-bind="wideLayout" ${forceWide() ? 'checked' : ''}><i class="switch"></i></label>
       </section>
       <section class="card"><div class="card-title">Backup</div>
         <p class="muted small">${gm() ? 'Local (offline) data on this device — group games are stored online. ' : ''}All data is stored only on this device (${data.commanders.length} commanders, ${data.games.length} games, ${(size / 1024).toFixed(1)} KB). Export a backup regularly — e.g. save it to Files or iCloud Drive.</p>
@@ -1800,6 +1835,7 @@
       if (n > 0 && n < 1000) { getSetup().life = n; save(); $$('#life-seg button').forEach((b) => b.classList.toggle('on', +b.dataset.v === n)); el.classList.toggle('on', !LIFE_PRESETS.includes(n)); }
     },
     randomFirst: (el) => { data.settings.randomFirst = el.checked; save(); },
+    wideLayout: (el) => { try { localStorage.setItem(WIDE_KEY, el.checked ? '1' : '0'); } catch (e) { /* private mode */ } },
     spinClock: (el) => { data.settings.spinClock = el.checked; save(); const bd = $('#board'); if (bd) bd.classList.toggle('no-spin', !el.checked); },
     wakeLock: (el) => { data.settings.wakeLock = el.checked; save(); },
     importFile: (el) => { const f = el.files && el.files[0]; el.value = ''; if (f) importFile(f); },
@@ -1840,7 +1876,7 @@
     const screenH = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
     // content drawn from the very top (sat > 0) but shorter than the screen => unpainted band at the bottom
     const gapBelow = standalone && isIOS && sat > 0 ? Math.max(0, Math.round(screenH - h)) : 0;
-    root.style.setProperty('--app-h', h + 'px');
+    root.style.setProperty('--app-h', h + 'px'); root.style.setProperty('--app-w', window.innerWidth + 'px');
     if (gapBelow > 0) root.style.setProperty('--sab', Math.max(4, sab - gapBelow) + 'px');
     else root.style.removeProperty('--sab');
     root.classList.toggle('standalone', standalone);
@@ -1867,7 +1903,7 @@
       ['visualViewport.height / offsetTop', vv ? `${Math.round(vv.height * 10) / 10} / ${vv.offsetTop}` : 'n/a'],
       ['screen.width × height', `${screen.width} × ${screen.height}`], ['devicePixelRatio', devicePixelRatio],
       ['safe-area-inset top / bottom', `${cs.paddingTop} / ${cs.paddingBottom}`], ['safe-area-inset left / right', `${cs.paddingLeft} / ${cs.paddingRight}`],
-      ['Detected unpainted band below', vp.gapBelow + 'px'], ['--app-h (game layer size)', getComputedStyle(root).getPropertyValue('--app-h').trim()],
+      ['Detected unpainted band below', vp.gapBelow + 'px'], ['--app-h (game layer size)', getComputedStyle(root).getPropertyValue('--app-h').trim()], ['Game layout', { wide: 'wide (landscape screen)', wide90: 'wide, turned 90° (upright screen)', tall: 'tall (wide layout off)' }[boardMode().key]],
       ['Effective bottom inset (--sab)', getComputedStyle(root).getPropertyValue('--sab').trim()],
       ['html height', rh(root)], ['body height', rh(document.body)], ['game layer height', gameEl.hidden ? 'hidden (open during a game)' : rh(gameEl)],
       ['User agent', navigator.userAgent],

@@ -7,7 +7,7 @@ Everything lives in `public/` (plain HTML/CSS/JS). There's no build step. Data i
 - `public/index.html`, `styles.css`, `app.js`: the app; `public/cloud.js`: online playgroups (Supabase data + offline sync)
 - `public/sw.js`: service worker (offline cache). Bump `CACHE` when you deploy changes.
 - `public/manifest.json`, `public/icons/`: PWA manifest + icons (180, 192, 512, maskable 512)
-- `tools/test.mjs`: Playwright end-to-end test (iPhone 390x844). `tools/make-icons.mjs` regenerates the icons; `tools/shot-standalone.mjs` renders the game with emulated iPhone safe areas; `tools/fixture-v1.json` is v1.0-format data used to test backward compatibility.
+- `tools/test.mjs`: Playwright end-to-end test (iPhone 390x844; `tools/board.mjs` = seat geometry helpers for the game board). `tools/make-icons.mjs` regenerates the icons; `tools/shot-standalone.mjs` renders the game with emulated iPhone safe areas; `tools/fixture-v1.json` is v1.0-format data used to test backward compatibility.
 - `screenshots/`: screenshots from the test run
 - `commander-tracker.zip`: contents of `public/`, ready to upload to any static host
 
@@ -161,3 +161,30 @@ Optional. Without an account the app works exactly as before, 100% local.
 - Known WebKit test limits: Playwright's WebKit offline emulation also blocks service-worker responses, so offline
   checks there use a real server shutdown (local) or a fetch wrapper (online). WebKit can't intercept requests from pages
   controlled by a service worker, so one online device runs with service workers blocked under WebKit.
+
+## Wide game layout (v1.6.1)
+- Every game now uses the wide (landscape) layout, also with the phone held upright. iOS Home Screen apps ignore the
+  manifest `orientation`, so the app does it itself: in a portrait viewport the game layer (`#game.rot90`) is a fixed
+  box sized to the screen with width and height swapped (`--app-h` × `--app-w`), turned 90° clockwise with a CSS transform.
+  With the phone really in landscape the game is shown without the extra turn. Turning the phone mid-game switches between
+  the two (the game state is untouched, an open player sheet turns with it). Stats, History, login and Settings don't change.
+- Players sit along the two long sides: the top row is turned 180° (it faces the far long side), the bottom row is upright.
+  Everything in a panel follows its seat: name, life, ⋯, chips, +/− hints and the first-game hint. From each seat, the half
+  farther away from the player (so the half nearest the screen centre) adds 1 and the near half subtracts 1; hold = ±10.
+- Layouts (wide board, seats clockwise from top-left): 2 players = one on each long side; 3 = one full-width seat on top,
+  two below; 4 = 2×2; 5 = three on top, two wider seats below; 6 = 2×3. No seat faces a short end.
+- Safe areas follow the turn: the board's edges use `--bt/--br/--bb/--bl`, which map to the screen's right/bottom/left/top
+  insets when turned, so the notch, the iOS home bar and the 812-of-874 px standalone gap are respected.
+- Player ⋯ sheets face their player (as before, now including the extra 90°). Shared screens (game menu, dice, End game,
+  confirmations, Display info) stay upright on the phone, full width, so reading and typing work normally.
+- Settings → Defaults → "Wide game layout on an upright phone" (on by default) turns it off and brings back the upright
+  layout from v1.6.0. It is a per-device setting stored under its own key `edh-tracker:wideLayout` (`'0'` = off), so the
+  saved data format is unchanged. Display info shows the current game layout.
+- Tests: `tools/board.mjs` works out each seat's screen direction from the CSS transforms (panel → root) and gives tap
+  points for the +/− halves in the player's own orientation; `test.mjs`, `test-games.mjs` and `test-stress.mjs` use it.
+  `test.mjs` checks 2–6 players upright (402×812) and in landscape (874×402): layout, seat edges, ±1 taps per seat, the + half
+  nearest the centre, name/⋯/hints following the seat, hold-to-repeat, first-game hint, centre timer, sheets, turning
+  mid-game, the iOS standalone safe areas and the Settings switch. `tools/shot-wide.mjs` renders the `screenshots/39-*` images.
+- Limits: the turn is emulated, so iOS itself stays in portrait (status bar, notifications and the keyboard stay upright;
+  that's why shared sheets with text fields stay upright too). While a text field is focused the board isn't re-laid out
+  (the keyboard resizes the viewport); it catches up on the next resize.
