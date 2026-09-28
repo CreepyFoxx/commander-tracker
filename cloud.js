@@ -68,6 +68,8 @@
   // v1.7 Commander Brackets: each player's bracket travels inside players[] (frozen when the game started);
   // bracket_min / bracket_max summarise the pod for querying (null when nobody had one)
   const normBracket = (b) => { if (b == null || b === '' || typeof b === 'boolean') return null; const n = Number(b); return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null; };
+  // v1.8: canonical Archidekt / Moxfield URL a deck's commanders were imported from (the database enforces the same shape)
+  const LINK_RE = /^https:\/\/(archidekt\.com\/decks\/[0-9]{1,10}|moxfield\.com\/decks\/[A-Za-z0-9_-]{8,32})$/;
   const podRange = (players) => { const bs = (players || []).map((p) => normBracket(p && p.bracket)).filter(Boolean); return bs.length ? [Math.min(...bs), Math.max(...bs)] : [null, null]; };
   const cleanPlayers = (players) => players.map((p) => (p && 'bracket' in p ? { ...p, bracket: normBracket(p.bracket) } : p));
   const toRow = (g, gid) => ({
@@ -184,7 +186,7 @@
     g.members = mem.data.filter((r) => r.profiles).map((r) => ({ ...r.profiles, role: r.role })).sort((a, b) => a.display_name.localeCompare(b.display_name));
     const ids = g.members.map((m) => m.id);
     const [decks, guests, games] = await Promise.all([
-      ids.length ? sb.from('decks').select('id, owner_id, commander, partner, colors, name, bracket, created_at, updated_at').in('owner_id', ids) : Promise.resolve({ data: [] }),
+      ids.length ? sb.from('decks').select('id, owner_id, commander, partner, colors, name, bracket, link, created_at, updated_at').in('owner_id', ids) : Promise.resolve({ data: [] }),
       sb.from('guests').select('id, name, linked_user_id, created_at').eq('group_id', gid),
       sb.from('games').select('*').eq('group_id', gid).order('ended_at', { ascending: false }).limit(2000),
     ]);
@@ -242,6 +244,7 @@
     need(st.user && sb, 'Sign in first');
     const row = { commander: deck.commander.trim(), partner: (deck.partner || '').trim() || null, colors: deck.colors || [], name: (deck.name || '').trim() || null, updated_at: new Date().toISOString() };
     if ('bracket' in deck) row.bracket = normBracket(deck.bracket); // v1.7; callers that don't know about brackets leave it as is
+    if ('link' in deck) row.link = LINK_RE.test(deck.link || '') ? deck.link : null; // v1.8: source deck URL (imported commanders); absent = unchanged
     const q = deck.id ? sb.from('decks').update(row).eq('id', deck.id).select().single() : sb.from('decks').insert({ ...row, owner_id: st.user.id }).select().single();
     const { data, error } = await q;
     if (error) throw new Error(friendlyError(error));

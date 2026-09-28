@@ -4,7 +4,7 @@ Static, dependency-free Progressive Web App for Magic: The Gathering Commander g
 Everything lives in `public/` (plain HTML/CSS/JS). There's no build step. Data is kept in `localStorage` on the device; optional online playgroups sync through Supabase (see below).
 
 ## Files
-- `public/index.html`, `styles.css`, `app.js`: the app; `public/cloud.js`: online playgroups (Supabase data + offline sync)
+- `public/index.html`, `styles.css`, `app.js`: the app; `public/cloud.js`: online playgroups (Supabase data + offline sync); `public/import.js`: deck-link import (v1.8)
 - `public/sw.js`: service worker (offline cache). Bump `CACHE` when you deploy changes.
 - `public/manifest.json`, `public/icons/`: PWA manifest + icons (180, 192, 512, maskable 512)
 - `tools/test.mjs`: Playwright end-to-end test (iPhone 390x844; `tools/board.mjs` = seat geometry helpers for the game board). `tools/make-icons.mjs` regenerates the icons; `tools/shot-standalone.mjs` renders the game with emulated iPhone safe areas; `tools/fixture-v1.json` is v1.0-format data used to test backward compatibility.
@@ -214,3 +214,45 @@ Optional. Without an account the app works exactly as before, 100% local.
 - Limits: only the deck owner can change a deck's bracket (others use a per-game override); a guest's bracket is remembered from
   their game history; pod stats ignore partial pods; a live 1.6.1 client ignores brackets (its saves keep the deck bracket but
   its games have none).
+
+## Deck-link import (v1.8.0): "Import from link"
+- Paste an **Archidekt** or **Moxfield** deck link, and the app reads the deck's commander(s): names (partners and a
+  Background as the second commander), colour identity, the deck name and the deck's bracket when the site has one. A
+  preview shows e.g. `Found: Pako, Arcane Retriever + Haldan, Avid Arcanist · UG`. It fills the form, and nothing is saved until you
+  tap Save. Pasting a link runs the import right away; Enter or **Find** also runs it.
+- Where it works: the commander editor (local), the commander picker at game setup ("Import from Archidekt / Moxfield", or
+  paste a link into the search box), the group deck editor and member deck picker (online; the deck name becomes the
+  nickname), and the guest-commander form.
+- Duplicates: if the commander (or partner pair) is already in the list or the group, the preview offers **Update it**
+  (bracket, colours, link) or **Add as new**. If you didn't choose, a dialog asks at save time.
+- Accepted links: `archidekt.com/decks/<id>[/<slug>]` and `moxfield.com/decks/<publicId>`, with or without `www`/`https`,
+  with query strings or fragments, API URLs, or text around the link. Other sites say "Only Archidekt and Moxfield links are
+  supported". A malformed id gets a "doesn't look like a deck link" message.
+- **Text / typed fallback** (no proxy): paste a text export with a `Commander` section, `[Commander]` tags, `*CMDR*` or
+  `# !Commander`, or just type one or two names (`Tymna + Thrasios`). Names are resolved through Scryfall's public
+  `cards/named?fuzzy=` endpoint, which allows CORS; ambiguous or unknown names show a message.
+- The **99 are never stored**. Only the commander names, colours, the bracket and the canonical deck link (`decks.link` /
+  `commanders[].link`) are kept. The editor shows "Imported from Archidekt/Moxfield ↗". Re-importing in the same form
+  replaces the link and any previously imported bracket.
+- Brackets: Archidekt's `edhBracket` is set by the deck owner. For Moxfield, when the bracket equals Moxfield's automatic
+  estimate (`autoBracket`) it is labelled **estimated**. Decks with brackets ignored import without one.
+- **Proxy**: neither site sends CORS headers for github.io, so the app calls the Supabase Edge Function `deck-commanders`
+  (`supabase/functions/deck-commanders/index.ts`, `verify_jwt` off, no secrets, no database access):
+  `GET /functions/v1/deck-commanders?source=archidekt|moxfield&id=<id>`. It strictly validates the id (Archidekt `^\d{1,10}$`,
+  Moxfield `^[A-Za-z0-9_-]{8,32}$`; anything else is 400) and only ever fetches `archidekt.com/api/decks/<id>/` or
+  `api2.moxfield.com/v3/decks/all/<id>`, so it can't be used as an open proxy. It returns only
+  `{source,id,url,name,commanders[{name,colors}],colors,bracket,bracketAuto,extra}` (at most 2 commanders; `extra` counts any further ones). CORS is limited to `https://creepyfoxx.github.io` and
+  localhost. It uses an 8 s upstream timeout, an identifying User-Agent, about 30 requests/min per IP, and a 10-minute cache of successful reads. Errors:
+  `not_found` 404, `private` 403, `no_commander` 422, `busy` 429, `blocked` 502 (the site's firewall refused), `timeout` 504.
+  The app turns these into plain messages. Offline, it says "Needs internet to import."
+- **Limitations**
+  - Archidekt's firewall (Google Cloud Armor) refuses a share of requests from cloud servers, roughly 1 in 3 in testing. The
+    app then says Archidekt blocked the request, suggests trying again in a minute or pasting the deck's text export, and doesn't
+    retry automatically: bot protection is never bypassed.
+  - Moxfield has worked reliably through the proxy. Both are unofficial APIs and can change.
+  - A private deck usually looks like "not found" (both sites return 404 for them). Maybeboard and sideboard commanders are ignored.
+- Online (Supabase): migration `deck_import_link` adds nullable `decks.link` with a check that only allows canonical
+  Archidekt/Moxfield deck URLs. RLS is unchanged. Older clients ignore the column, and saving a deck without importing keeps its link.
+- Tools: `public/import.js` (`window.EDHImport`: link/text parsing, proxy + Scryfall calls, messages), `tools/import-mock.mjs`
+  (proxy + Scryfall fixtures for the offline suites), `tools/test-import-live.mjs` (live proxy and real decks; `URL=`/`ENGINE=`),
+  `tools/shot-v18.mjs` (41-* screenshots). Stress now updates from the live v1.7.0 commit mid-game.

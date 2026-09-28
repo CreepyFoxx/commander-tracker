@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.7.0';
+  const APP_VERSION = '1.8.0';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -56,6 +56,7 @@
     hand: '<svg viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10V4.5a1.5 1.5 0 0 1 3 0V11M15 10.5V6a1.5 1.5 0 0 1 3 0v7.5c0 4-2.6 7-6.5 7-2.6 0-4.2-1.3-5.6-3.4L3.8 13.6a1.6 1.6 0 0 1 2.6-1.8L9 14.5V8a1.5 1.5 0 0 1 3 0"/></svg>',
     palette: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2 0-1.4-1.2-1.6-1.2-2.8 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4C21 6.4 17 3 12 3z"/><circle cx="7.5" cy="11.5" r="1.2"/><circle cx="10" cy="7.5" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>',
     bracket: '<svg viewBox="0 0 24 24"><path d="M3.5 17.5a8.5 8.5 0 0 1 17 0"/><path d="M12 17.5l4.3-5.3"/><circle cx="12" cy="17.5" r="1.5"/><path d="M5.9 11.4l1.4 1.1M12 8.9v1.8M18.1 11.4l-1.4 1.1"/></svg>',
+    link: '<svg viewBox="0 0 24 24" class="ico-link"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4L11.6 6"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1.6-1.6"/></svg>',
     solring: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="14.5" rx="8" ry="5.8"/><ellipse cx="12" cy="14.5" rx="4.2" ry="2.6"/><path d="M12 3.2l2.3 3.1L12 8.7 9.7 6.3z"/></svg>',
   };
   // commander colour identity as a CSS gradient (deck accent strips, commander bars)
@@ -72,6 +73,10 @@
     'Stronger decks: up to three Game Changers, no mass land denial or early 2-card combos.', 'High power: anything legal goes.', 'Competitive: tuned to win the cEDH metagame.'];
   // 1..5, anything else (missing, null, 0, 6, 2.5, "x") = not set
   const normBracket = (b) => { if (b == null || b === '' || typeof b === 'boolean') return null; const n = Number(b); return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null; };
+  // v1.8: canonical Archidekt / Moxfield deck URL a commander was imported from (same shape the database accepts)
+  const LINK_RE = /^https:\/\/(archidekt\.com\/decks\/[0-9]{1,10}|moxfield\.com\/decks\/[A-Za-z0-9_-]{8,32})$/;
+  function cleanLink(u) { return typeof u === 'string' && LINK_RE.test(u) ? u : ''; }
+  const linkSite = (u) => (/archidekt\.com/.test(u) ? 'Archidekt' : 'Moxfield');
   // small chip: number + name (the name hides on narrow panels via CSS)
   function bchip(b, cls = '') {
     b = normBracket(b); if (!b) return '';
@@ -115,13 +120,15 @@
     };
   }
   function sanitizeCommander(c) {
-    return {
+    const out = {
       id: String(c.id || uid()), name: String(c.name || 'Unnamed').slice(0, 80),
       partner: String(c.partner || '').slice(0, 80),
       colors: WUBRG.filter((x) => Array.isArray(c.colors) && c.colors.includes(x)),
       owner: String(c.owner || '').slice(0, 40), createdAt: +c.createdAt || Date.now(),
       bracket: normBracket(c.bracket), // v1.7 (null = not set; older data has none)
     };
+    const link = cleanLink(c.link); if (link) out.link = link; // v1.8, optional: only present on imported commanders
+    return out;
   }
   function normalize(d) {
     const out = Object.assign(defaults(), d || {});
@@ -348,9 +355,10 @@
       const ql = q.trim().toLowerCase();
       const cs = data.commanders.filter((c) => !ql || cmdLabel(c).toLowerCase().includes(ql) || c.owner.toLowerCase().includes(ql))
         .sort((a, b) => ((b.owner.toLowerCase() === seatName) - (a.owner.toLowerCase() === seatName)) || ((last.get(b.id) || 0) - (last.get(a.id) || 0)) || a.name.localeCompare(b.name));
-      const exact = data.commanders.some((c) => c.name.toLowerCase() === ql);
-      list.innerHTML = `${ql && !exact ? `<button class="pick-row new" data-new>+ Create “${esc(q.trim())}”</button>` : ''}
-        ${!ql ? '<button class="pick-row new" data-new>+ New commander</button>' : ''}
+      const exact = data.commanders.some((c) => c.name.toLowerCase() === ql); const link = isDeckLink(q);
+      list.innerHTML = `${link ? `<button class="pick-row new imp-pick" data-import="1">${I.link}<span>Import this deck’s commander</span></button>` : ''}
+        ${ql && !exact && !link ? `<button class="pick-row new" data-new>+ Create “${esc(q.trim())}”</button>` : ''}
+        ${!ql ? `<button class="pick-row new" data-new>+ New commander</button>${IMP ? `<button class="pick-row new imp-pick" data-import>${I.link}<span>Import from Archidekt / Moxfield</span></button>` : ''}` : ''}
         ${cs.map((c) => `<button class="pick-row ${c.id === s.seats[i].commanderId ? 'on' : ''}" data-id="${c.id}"><span class="pips">${pips(c.colors)}</span><span class="pr-main"><b>${esc(cmdLabel(c))}</b>${c.owner || c.bracket ? `<small class="pr-sub">${bchip(c.bracket)}${c.owner ? `<span class="ellipsis">${esc(c.owner)}</span>` : ''}</small>` : ''}</span></button>`).join('')}
         ${s.seats[i].commanderId ? '<button class="pick-row clear" data-id="">No commander</button>' : ''}
         ${!cs.length && !ql ? '<p class="muted small center">No saved commanders yet.</p>' : ''}`;
@@ -358,9 +366,10 @@
     ov.querySelector('[data-role=q]').addEventListener('input', (e) => { q = e.target.value; draw(); });
     list.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
-      if (b.hasAttribute('data-new')) {
+      if (b.hasAttribute('data-new') || b.hasAttribute('data-import')) {
         closeOverlay(ov);
-        openCmdEditor(null, { name: q.trim(), owner: s.seats[i].name.trim(), onSave: (c) => {
+        const imp = b.hasAttribute('data-import');
+        openCmdEditor(null, { name: imp ? '' : q.trim(), owner: s.seats[i].name.trim(), importOpen: imp, importSrc: imp && isDeckLink(q) ? q.trim() : '', onSave: (c) => {
           s.seats[i].commanderId = c.id; if (!s.seats[i].name.trim() && c.owner) s.seats[i].name = c.owner; save(); renderTab();
         } });
         return;
@@ -372,24 +381,127 @@
     draw();
   }
 
+  // ---------- v1.8: "Import from link" (only the commanders of an Archidekt / Moxfield deck, never the 99; see import.js) ----------
+  const IMP = window.EDHImport || null;
+  const cmdKey = (a, b) => [a, b].map((x) => String(x || '').trim().toLowerCase()).filter(Boolean).sort().join(' + ');
+  const deckKey = (deck) => cmdKey(deck.commanders[0] && deck.commanders[0].name, deck.commanders[1] && deck.commanders[1].name);
+  const isDeckLink = (q) => { const r = IMP && IMP.parseLink(q); return !!(r && !r.error); };
+  function importBoxHtml(opts = {}) {
+    if (!IMP) return '';
+    const open = !!(opts.open || opts.src);
+    return `<div class="imp ${open ? 'open' : ''}" data-role="imp">
+      <button type="button" class="imp-toggle" data-imp="toggle" aria-expanded="${open}">${I.link}<span><b>Import from link</b><small>Archidekt or Moxfield · commanders only, never the 99</small></span></button>
+      <div class="imp-body" ${open ? '' : 'hidden'}>
+        <div class="imp-row"><textarea data-imp="src" rows="1" placeholder="Paste a deck link" aria-label="Archidekt or Moxfield deck link" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="go">${esc(opts.src || '')}</textarea><button type="button" class="btn primary sm" data-imp="go">Find</button></div>
+        <div class="imp-help">No link? Paste the deck’s text export, or type the commander’s name.</div>
+        <div class="imp-out" data-imp="out" aria-live="polite"></div>
+      </div></div>`;
+  }
+  function importPreviewHtml(deck, dup, saveLabel) {
+    return `<div class="imp-card" style="--deck:${manaGrad(deck.colors, '90deg')}">
+      <div class="imp-found">Found: <b>${esc(deck.commanders.map((c) => c.name).join(' + '))}</b> · <span class="imp-ci" role="img" aria-label="${colorWords(deck.colors)}">${IMP.ciString(deck.colors)}</span></div>
+      <div class="imp-meta"><span class="pips">${pips(deck.colors)}</span>${deck.name ? `<span class="ellipsis">“${esc(deck.name)}”</span>` : ''}${bchip(deck.bracket)}${deck.bracketAuto ? '<small>estimated</small>' : ''}<span class="imp-src">${esc(deck.site)}</span></div>
+      ${deck.extra ? `<div class="imp-note">${deck.extra} more commander card${deck.extra === 1 ? '' : 's'} ignored (2 at most).</div>` : ''}
+      ${dup ? `<div class="imp-dup"><div>Already saved: <b>${esc(dup.label)}</b>${dup.who ? ` <span class="muted">· ${esc(dup.who)}</span>` : ''}. Update it instead of adding a duplicate?</div>
+        <div class="row"><button type="button" class="btn sm primary" data-imp="update">Update it</button><button type="button" class="btn sm ghost" data-imp="keep">Add as new</button></div></div>`
+        : `<div class="imp-note">Filled in below. Check it, then tap <b>${esc(saveLabel)}</b>.</div>`}
+    </div>`;
+  }
+  function paintColors(root, colors) {
+    root.querySelectorAll('.color-toggles [data-color]').forEach((t) => { const on = colors.includes(t.dataset.color); t.classList.toggle('on', on); t.setAttribute('aria-pressed', on); });
+  }
+  // wires the import box inside a form. cfg: { saveLabel, apply(deck), dup(deck) -> { item, label, who } | null, onUpdate(deck, item), auto }
+  function bindImport(ov, cfg) {
+    const box = ov.querySelector('[data-role=imp]'); if (!box) return { found: null, dup: null };
+    const src = box.querySelector('[data-imp=src]'); const out = box.querySelector('[data-imp=out]'); const body = box.querySelector('.imp-body');
+    const tog = box.querySelector('[data-imp=toggle]');
+    const st = { found: null, dup: null, seq: 0 };
+    const grow = () => { src.style.height = 'auto'; src.style.height = Math.min(src.scrollHeight + 2, 150) + 'px'; };
+    const setOpen = (on, focus) => {
+      body.hidden = !on; box.classList.toggle('open', on); tog.setAttribute('aria-expanded', on);
+      if (on) { grow(); if (focus) { try { src.focus({ preventScroll: true }); } catch (e) { /* old browsers */ } } }
+    };
+    const run = async () => {
+      const q = src.value.trim(); const my = ++st.seq;
+      if (!q) { out.innerHTML = `<div class="imp-err" role="alert">${IMP.message({ code: 'empty' })}</div>`; return; }
+      out.innerHTML = '<div class="imp-busy"><span class="spinner"></span>Looking it up…</div>'; box.classList.add('busy');
+      try {
+        const deck = await IMP.importAny(q);
+        if (my !== st.seq || !document.contains(box)) return;
+        st.found = deck; st.dup = cfg.dup ? cfg.dup(deck) : null;
+        cfg.apply(deck);
+        out.innerHTML = importPreviewHtml(deck, st.dup, cfg.saveLabel);
+      } catch (e) {
+        if (my !== st.seq || !document.contains(box)) return;
+        if (!(e instanceof IMP.ImportError)) console.warn('import failed', e);
+        st.found = null; st.dup = null;
+        out.innerHTML = `<div class="imp-err" role="alert">${IMP.message(e)}</div>`;
+      } finally { if (my === st.seq) box.classList.remove('busy'); }
+    };
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-imp]'); if (!b || b.tagName === 'TEXTAREA') return;
+      const k = b.dataset.imp;
+      if (k === 'toggle') setOpen(body.hidden, true);
+      else if (k === 'go') run();
+      else if (k === 'update' && st.found && st.dup && cfg.onUpdate) cfg.onUpdate(st.found, st.dup.item);
+      else if (k === 'keep') { st.dup = null; const d = out.querySelector('.imp-dup'); if (d) d.outerHTML = `<div class="imp-note">Adding a new one. Tap <b>${esc(cfg.saveLabel)}</b> when ready.</div>`; }
+    });
+    src.addEventListener('input', grow);
+    src.addEventListener('paste', () => setTimeout(() => { grow(); if (isDeckLink(src.value)) run(); }, 0));
+    src.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); run(); } });
+    if (!body.hidden) grow();
+    if (cfg.auto && src.value.trim()) run();
+    return st;
+  }
+  // "update instead of duplicating?" at save time (when the Update / Add as new choice in the preview wasn't made)
+  async function askDuplicate(dup) {
+    return choiceDialog(`<b>${esc(dup.label)}</b>${dup.who ? ` (${esc(dup.who)})` : ''} is already saved. Update it instead of adding a duplicate?`,
+      [{ label: 'Update existing', value: 'update', cls: 'primary' }, { label: 'Add a new one', value: 'new' }]);
+  }
+  const linkedHtml = (link) => (cleanLink(link) ? `<div class="imp-linked">${I.link}<span>Imported from <a href="${esc(link)}" target="_blank" rel="noopener">${linkSite(link)}</a> (commanders only)</span></div>` : '');
+
   function openCmdEditor(id, opts = {}) {
     const c = getCmd(id);
-    const st = { name: c ? c.name : opts.name || '', partner: c ? c.partner : '', colors: c ? c.colors.slice() : [], owner: c ? c.owner : opts.owner || '', bracket: c ? normBracket(c.bracket) : null };
+    const st = { name: c ? c.name : opts.name || '', partner: c ? c.partner : '', colors: c ? c.colors.slice() : [], owner: c ? c.owner : opts.owner || '', bracket: c ? normBracket(c.bracket) : null, link: c ? cleanLink(c.link) : '' };
     const stats = c ? commanderStats().get(c.id) : null;
     const recent = c ? data.games.filter((g) => g.players.some((p) => p.commanderId === c.id)).slice(0, 5) : [];
     const ov = openSheet(`<div class="sheet-head"><h2>${c ? 'Edit commander' : 'New commander'}</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
+        ${importBoxHtml({ open: opts.importOpen, src: opts.importSrc })}
         <div class="field"><label>Commander name</label><input type="text" data-f="name" value="${esc(st.name)}" placeholder="e.g. Atraxa, Praetors' Voice" autocapitalize="words" maxlength="80"></div>
         <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" value="${esc(st.partner)}" placeholder="Second commander, if any" autocapitalize="words" maxlength="80"></div>
         <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="${st.colors.includes(x)}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
         <div class="field"><label>Owner / player <span class="muted">(optional)</span></label><input type="text" data-f="owner" list="owner-names" value="${esc(st.owner)}" placeholder="Who plays this deck" autocapitalize="words" maxlength="40">
           <datalist id="owner-names">${knownPlayers().map((n) => `<option value="${esc(n)}">`).join('')}</datalist></div>
         <div class="field br-field"><label>Commander Bracket <span class="muted">(optional)</span></label>${bracketPicker(st.bracket)}</div>
+        ${linkedHtml(st.link)}
         ${stats ? `<div class="mini-stats"><div><b>${stats.games}</b><span>games</span></div><div><b>${stats.wins}</b><span>wins</span></div><div><b>${pct(stats.wins, stats.games)}</b><span>win rate</span></div><div><b>${fmtDur(stats.dur / stats.games)}</b><span>avg game</span></div></div>${cmdTurnHtml(stats)}` : ''}
         ${recent.length ? `<div class="sec-title">Recent games</div>${recent.map((g) => { const me = g.players.find((p) => p.commanderId === c.id); return `<div class="recent-row"><span>${fmtShort(g.endedAt)}</span><span class="ellipsis">${me.isWinner ? '🏆 Won' : ordinal(me.place || g.players.length)} · ${g.playerCount}p${normBracket(me.bracket) ? ' · B' + me.bracket : ''}${g.turns ? ' · T' + g.turns : ''}${Number.isInteger(me.turnPos) ? ' · ' + ordinal(me.turnPos) + ' to play' : ''}${me.solRingT1 ? ' · T1 Sol Ring' : ''}</span><span class="muted">${fmtDur(g.durationMs)}</span></div>`; }).join('')}` : ''}
         <div class="sheet-actions">${c ? '<button class="btn danger-text" data-a="delete">Delete</button>' : ''}<button class="btn primary grow" data-a="save">${c ? 'Save' : 'Add commander'}</button></div>
       </div>`, { cls: 'tall' });
     bindBracketPicker(ov.querySelector('.br-field'), () => st.bracket, (v) => { st.bracket = v; });
+    const done = (cmd, msg) => { save(true); closeOverlay(ov); toast(msg); if (opts.onSave) opts.onSave(cmd); else renderTab(); };
+    const updateExisting = (x, v) => { Object.assign(x, { name: v.name, partner: v.partner, colors: v.colors.slice() }); if (v.bracket) x.bracket = v.bracket; if (v.link) x.link = v.link; done(x, 'Commander updated'); };
+    const imp = bindImport(ov, {
+      saveLabel: c ? 'Save' : 'Add commander', auto: !!opts.importSrc,
+      apply: (deck) => {
+        ov.querySelector('[data-f=name]').value = deck.commanders[0].name;
+        ov.querySelector('[data-f=partner]').value = deck.commanders[1] ? deck.commanders[1].name : '';
+        st.colors = deck.colors.slice(); paintColors(ov, st.colors);
+        if (deck.bracket || st.brImported) { st.bracket = deck.bracket; paintBracketPicker(ov.querySelector('.br-field'), deck.bracket); } // a later import without one clears an earlier import's
+        st.brImported = !!deck.bracket;
+        st.link = deck.url || (c ? cleanLink(c.link) : ''); // the latest import wins; text / typed imports have no link
+      },
+      // same deck link, or the same commander(s) owned by the same (or an unnamed) player
+      dup: (deck) => {
+        if (c) return null;
+        const k = deckKey(deck); const owner = ov.querySelector('[data-f=owner]').value.trim().toLowerCase();
+        const x = data.commanders.filter((y) => ((deck.url && y.link === deck.url) || cmdKey(y.name, y.partner) === k) && !(owner && y.owner && y.owner.toLowerCase() !== owner))
+          .sort((a, b) => (b.owner.toLowerCase() === owner) - (a.owner.toLowerCase() === owner))[0];
+        return x ? { item: x, label: cmdLabel(x), who: x.owner } : null;
+      },
+      onUpdate: (deck, x) => updateExisting(x, { name: deck.commanders[0].name, partner: deck.commanders[1] ? deck.commanders[1].name : '', colors: deck.colors, bracket: deck.bracket, link: deck.url }),
+    });
     ov.addEventListener('click', async (e) => {
       const tog = e.target.closest('[data-color]');
       if (tog) {
@@ -400,10 +512,13 @@
       $$('[data-f]', ov).forEach((inp) => { st[inp.dataset.f] = inp.value.trim(); });
       if (a.dataset.a === 'save') {
         if (!st.name) { toast('Please enter a commander name'); return; }
+        if (!c && imp.found && imp.dup) {
+          const pickd = await askDuplicate(imp.dup); if (!pickd) return;
+          if (pickd === 'update') { updateExisting(imp.dup.item, st); return; }
+        }
         let cmd = c;
-        if (cmd) Object.assign(cmd, st); else { cmd = sanitizeCommander({ ...st, id: uid(), createdAt: Date.now() }); data.commanders.push(cmd); }
-        save(true); closeOverlay(ov); toast(c ? 'Commander updated' : 'Commander added');
-        if (opts.onSave) opts.onSave(cmd); else renderTab();
+        if (cmd) { const { link, brImported, ...rest } = st; Object.assign(cmd, rest); if (link) cmd.link = link; else delete cmd.link; } else { cmd = sanitizeCommander({ ...st, id: uid(), createdAt: Date.now() }); data.commanders.push(cmd); }
+        done(cmd, c ? 'Commander updated' : 'Commander added');
       } else if (a.dataset.a === 'delete') {
         if (!(await confirmDialog(`Delete <b>${esc(c.name)}</b>? Past games keep their record, but it won't show in the commanders list.`, 'Delete', true))) return;
         data.commanders = data.commanders.filter((x) => x.id !== c.id);
@@ -1625,7 +1740,7 @@
           const existing = cd().decks.filter((d) => d.owner_id === u.id);
           for (const c of mine()) {
             const same = existing.find((d) => d.commander.toLowerCase() === c.name.toLowerCase() && (d.partner || '').toLowerCase() === (c.partner || '').toLowerCase());
-            deckMap[c.id] = same ? same.id : (await cloud.saveDeck({ commander: c.name, partner: c.partner, colors: c.colors, bracket: normBracket(c.bracket) })).id;
+            deckMap[c.id] = same ? same.id : (await cloud.saveDeck({ commander: c.name, partner: c.partner, colors: c.colors, bracket: normBracket(c.bracket), ...(cleanLink(c.link) ? { link: c.link } : {}) })).id;
           }
         }
         let n = 0;
@@ -1791,12 +1906,13 @@
     const m = memberById(seat.userId); const decks = cd().decks.filter((d) => d.owner_id === seat.userId); const mine = seat.userId === me().id;
     const ov = openSheet(`<div class="sheet-head"><h2>${esc(m ? m.display_name : 'Player')}'s deck</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body"><div class="pick-list">
-        ${mine ? '<button class="pick-row new" data-new>+ New deck</button>' : ''}
+        ${mine ? `<button class="pick-row new" data-new>+ New deck</button>${IMP ? `<button class="pick-row new imp-pick" data-import>${I.link}<span>Import from Archidekt / Moxfield</span></button>` : ''}` : ''}
         ${decks.map((d) => `<button class="pick-row ${d.id === seat.deckId ? 'on' : ''}" data-deck="${d.id}"><span class="pips">${pips(d.colors)}</span><span class="pr-main"><b>${esc(deckLabel(d))}</b>${d.name || d.bracket ? `<small class="pr-sub">${bchip(d.bracket)}${d.name ? `<span class="ellipsis">${esc(d.name)}</span>` : ''}</small>` : ''}</span></button>`).join('')}
         ${!decks.length ? `<p class="muted small center">${mine ? 'You have no decks yet.' : 'No decks yet — they can add decks in their own app (Commanders tab).'}</p>` : ''}
         <button class="pick-row clear" data-deck="">No deck</button></div></div>`, { cls: 'tall' });
     ov.addEventListener('click', (e) => {
-      if (e.target.closest('[data-new]')) { closeOverlay(ov); openDeckEditor(null, { onSave: (d) => { seat.deckId = d.id; delete seat.bracket; save(); renderTab(); } }); return; }
+      const nb = e.target.closest('[data-new], [data-import]');
+      if (nb) { closeOverlay(ov); openDeckEditor(null, { importOpen: nb.hasAttribute('data-import'), onSave: (d) => { seat.deckId = d.id; delete seat.bracket; save(); renderTab(); } }); return; }
       const b = e.target.closest('[data-deck]'); if (!b) return;
       if ((b.dataset.deck || null) !== seat.deckId) delete seat.bracket;
       seat.deckId = b.dataset.deck || null; save(); closeOverlay(ov); renderTab();
@@ -1814,30 +1930,43 @@
     const draw = () => {
       const ql = q.trim().toLowerCase(); const f = (c) => !ql || (c.name + ' ' + c.partner).toLowerCase().includes(ql);
       const mineKeys = new Set(theirs.map((c) => (c.name + '|' + c.partner).toLowerCase()));
-      const exact = all.some((c) => c.name.toLowerCase() === ql);
-      list.innerHTML = `${ql && !exact ? `<button class="pick-row new" data-new>+ Use “${esc(q.trim())}”</button>` : ''}
+      const exact = all.some((c) => c.name.toLowerCase() === ql); const link = isDeckLink(q);
+      list.innerHTML = `${link ? `<button class="pick-row new imp-pick" data-import="1">${I.link}<span>Import this deck’s commander</span></button>` : ''}
+        ${ql && !exact && !link ? `<button class="pick-row new" data-new>+ Use “${esc(q.trim())}”</button>` : ''}
         ${theirs.filter(f).map((c) => row(c, `played by ${esc(seat.name)} before`)).join('')}
         ${all.filter((c) => f(c) && !mineKeys.has((c.name + '|' + c.partner).toLowerCase())).map((c) => row({ name: c.name, partner: c.partner, colors: c.colors }, '')).join('')}
-        ${!ql ? '<button class="pick-row new" data-new>+ Other commander</button>' : ''}`;
+        ${!ql ? `<button class="pick-row new" data-new>+ Other commander</button>${IMP ? `<button class="pick-row new imp-pick" data-import>${I.link}<span>Import from Archidekt / Moxfield</span></button>` : ''}` : ''}`;
     };
     ov.querySelector('[data-role=q]').addEventListener('input', (e) => { q = e.target.value; draw(); });
     list.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-new')) { closeOverlay(ov); openGuestCommanderForm(i, q.trim()); return; }
+      if (b.hasAttribute('data-import')) { closeOverlay(ov); openGuestCommanderForm(i, '', { importOpen: true, importSrc: isDeckLink(q) ? q.trim() : '' }); return; }
       seat.commander = JSON.parse(b.dataset.c); save(); closeOverlay(ov); renderTab();
     });
     draw();
   }
-  function openGuestCommanderForm(i, name) {
+  function openGuestCommanderForm(i, name, opts = {}) {
     const seat = groupSeats()[i]; const st = { colors: [], bracket: null };
     const ov = openSheet(`<div class="sheet-head"><h2>${esc(seat.name)}'s commander</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
+        ${importBoxHtml({ open: opts.importOpen, src: opts.importSrc })}
         <div class="field"><label>Commander</label><input type="text" data-f="name" value="${esc(name)}" maxlength="80" autocapitalize="words"></div>
         <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" maxlength="80" autocapitalize="words"></div>
         <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="false">${x}</button>`).join('')}</div></div>
         <div class="field br-field"><label>Commander Bracket <span class="muted">(optional)</span></label>${bracketPicker(null)}</div>
         <button class="btn primary big block" data-a="ok">Use this commander</button></div>`, { cls: 'tall' });
     bindBracketPicker(ov.querySelector('.br-field'), () => st.bracket, (v) => { st.bracket = v; });
+    bindImport(ov, {
+      saveLabel: 'Use this commander', auto: !!opts.importSrc,
+      apply: (deck) => {
+        ov.querySelector('[data-f=name]').value = deck.commanders[0].name;
+        ov.querySelector('[data-f=partner]').value = deck.commanders[1] ? deck.commanders[1].name : '';
+        st.colors = deck.colors.slice(); paintColors(ov, st.colors);
+        if (deck.bracket || st.brImported) { st.bracket = deck.bracket; paintBracketPicker(ov.querySelector('.br-field'), deck.bracket); }
+        st.brImported = !!deck.bracket;
+      },
+    });
     ov.addEventListener('click', (e) => {
       const t = e.target.closest('[data-color]');
       if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); t.setAttribute('aria-pressed', st.colors.includes(x)); return; }
@@ -1890,19 +2019,49 @@
   function openDeckEditor(id, opts = {}) {
     if (!cloud.online()) { toast('Connect to the internet to edit decks'); return; }
     const d = id ? deckById(id) : null;
-    const st = { colors: d ? d.colors.slice() : [], bracket: d ? normBracket(d.bracket) : null };
+    const st = { colors: d ? d.colors.slice() : [], bracket: d ? normBracket(d.bracket) : null, link: d ? cleanLink(d.link) : '' };
     const s = d ? commanderStats().get(d.id) : null;
     const ov = openSheet(`<div class="sheet-head"><h2>${d ? 'Edit deck' : 'New deck'}</h2><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
       <div class="sheet-body">
+        ${importBoxHtml({ open: opts.importOpen, src: opts.importSrc })}
         <div class="field"><label>Commander</label><input type="text" data-f="commander" value="${esc(d ? d.commander : '')}" maxlength="80" autocapitalize="words" placeholder="e.g. Atraxa, Praetors' Voice"></div>
         <div class="field"><label>Partner / background <span class="muted">(optional)</span></label><input type="text" data-f="partner" value="${esc(d ? d.partner || '' : '')}" maxlength="80" autocapitalize="words"></div>
         <div class="field"><label>Color identity</label><div class="color-toggles">${WUBRG.map((x) => `<button class="ctog pip-${x} ${st.colors.includes(x) ? 'on' : ''}" data-color="${x}" aria-label="${COLOR_NAME[x]}" aria-pressed="${st.colors.includes(x)}">${x}</button>`).join('')}</div><div class="muted small">None selected = colorless</div></div>
         <div class="field"><label>Deck name <span class="muted">(optional)</span></label><input type="text" data-f="name" value="${esc(d ? d.name || '' : '')}" maxlength="60" placeholder="e.g. Superfriends"></div>
         <div class="field br-field"><label>Commander Bracket <span class="muted">(optional)</span></label>${bracketPicker(st.bracket)}</div>
+        ${linkedHtml(st.link)}
         ${s ? `<div class="mini-stats"><div><b>${s.games}</b><span>games</span></div><div><b>${s.wins}</b><span>wins</span></div><div><b>${pct(s.wins, s.games)}</b><span>win rate</span></div><div><b>${fmtDur(s.dur / s.games)}</b><span>avg game</span></div></div>${cmdTurnHtml(s)}` : ''}
         <div class="sheet-actions">${d ? '<button class="btn danger-text" data-a="delete">Delete</button>' : ''}<button class="btn primary grow" data-a="save">${d ? 'Save' : 'Add deck'}</button></div>
       </div>`, { cls: 'tall' });
     bindBracketPicker(ov.querySelector('.br-field'), () => st.bracket, (v) => { st.bracket = v; });
+    let busy = false;
+    // update one of my existing decks with what was imported / typed (keeps its own bracket / name / link when the import has none)
+    const updateExisting = async (x, v) => {
+      if (busy) return; busy = true;
+      try {
+        const saved = await cloud.saveDeck({ id: x.id, commander: v.commander, partner: v.partner, name: v.name || x.name || '', colors: v.colors, bracket: v.bracket || normBracket(x.bracket), link: v.link || cleanLink(x.link) || null });
+        closeOverlay(ov); toast('Deck updated'); if (opts.onSave) opts.onSave(saved); else renderTab();
+      } catch (err) { toast(err.message); } finally { busy = false; }
+    };
+    const imp = bindImport(ov, {
+      saveLabel: d ? 'Save' : 'Add deck', auto: !!opts.importSrc,
+      apply: (deck) => {
+        ov.querySelector('[data-f=commander]').value = deck.commanders[0].name;
+        ov.querySelector('[data-f=partner]').value = deck.commanders[1] ? deck.commanders[1].name : '';
+        if (deck.name) ov.querySelector('[data-f=name]').value = deck.name;
+        st.colors = deck.colors.slice(); paintColors(ov, st.colors);
+        if (deck.bracket || st.brImported) { st.bracket = deck.bracket; paintBracketPicker(ov.querySelector('.br-field'), deck.bracket); }
+        st.brImported = !!deck.bracket;
+        st.link = deck.url || (d ? cleanLink(d.link) : '');
+      },
+      dup: (deck) => {
+        if (d) return null;
+        const k = deckKey(deck);
+        const x = cd().decks.find((y) => y.owner_id === me().id && ((deck.url && y.link === deck.url) || cmdKey(y.commander, y.partner) === k));
+        return x ? { item: x, label: deckLabel(x), who: x.name || '' } : null;
+      },
+      onUpdate: (deck, x) => updateExisting(x, { commander: deck.commanders[0].name, partner: deck.commanders[1] ? deck.commanders[1].name : '', name: deck.name, colors: deck.colors, bracket: deck.bracket, link: deck.url }),
+    });
     ov.addEventListener('click', async (e) => {
       const t = e.target.closest('[data-color]');
       if (t) { const x = t.dataset.color; st.colors = st.colors.includes(x) ? st.colors.filter((y) => y !== x) : WUBRG.filter((y) => y === x || st.colors.includes(y)); t.classList.toggle('on', st.colors.includes(x)); t.setAttribute('aria-pressed', st.colors.includes(x)); return; }
@@ -1911,8 +2070,13 @@
         if (a.dataset.a === 'save') {
           const f = (k) => ov.querySelector(`[data-f=${k}]`).value.trim();
           if (!f('commander')) { toast('Enter the commander name'); return; }
+          const vals = { commander: f('commander'), partner: f('partner'), name: f('name'), colors: st.colors, bracket: st.bracket, link: st.link };
+          if (!d && imp.found && imp.dup) {
+            const pickd = await askDuplicate(imp.dup); if (!pickd) return;
+            if (pickd === 'update') { await updateExisting(imp.dup.item, vals); return; }
+          }
           a.disabled = true;
-          const saved = await cloud.saveDeck({ id: d && d.id, commander: f('commander'), partner: f('partner'), name: f('name'), colors: st.colors, bracket: st.bracket });
+          const saved = await cloud.saveDeck({ id: d && d.id, commander: vals.commander, partner: vals.partner, name: vals.name, colors: vals.colors, bracket: vals.bracket, ...(st.link ? { link: st.link } : {}) });
           closeOverlay(ov); toast(d ? 'Deck saved' : 'Deck added');
           if (opts.onSave) opts.onSave(saved); else renderTab();
         } else if (a.dataset.a === 'delete') {

@@ -1,7 +1,7 @@
 /* Commander Tracker service worker: offline app shell, stale-while-revalidate. */
-const CACHE = 'edh-tracker-v1.7.0';
+const CACHE = 'edh-tracker-v1.8.0';
 const ASSETS = [
-  './', 'index.html', 'styles.css', 'app.js', 'cloud.js', 'manifest.json',
+  './', 'index.html', 'styles.css', 'app.js', 'cloud.js', 'import.js', 'manifest.json',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'
 ];
 // Login backgrounds: precached when present; a missing file never breaks the install (bump CACHE when replacing them)
@@ -52,7 +52,7 @@ self.addEventListener('fetch', (e) => {
     })());
     return;
   }
-  if (url.origin !== self.location.origin) return; // Supabase API, Google etc.: never touched by the SW
+  if (url.origin !== self.location.origin) return; // Supabase API (incl. the deck-import function), Scryfall, Google etc.: never touched by the SW
   const isNav = req.mode === 'navigate';
   // OAuth callback (?code= / ?error=): let the browser load it from the network untouched, so the query reaches the app as-is
   if (isNav && ['code', 'error', 'error_description'].some((k) => url.searchParams.has(k))) return;
