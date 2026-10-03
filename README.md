@@ -256,3 +256,36 @@ Optional. Without an account the app works exactly as before, 100% local.
 - Tools: `public/import.js` (`window.EDHImport`: link/text parsing, proxy + Scryfall calls, messages), `tools/import-mock.mjs`
   (proxy + Scryfall fixtures for the offline suites), `tools/test-import-live.mjs` (live proxy and real decks; `URL=`/`ENGINE=`),
   `tools/shot-v18.mjs` (41-* screenshots). Stress now updates from the live v1.7.0 commit mid-game.
+
+## Seat preview (v1.9.0)
+- **New game → Seats** now starts with a small **table preview**: every seat where the game board will put it, with the seat
+  number and colour, the player's name (or the "Player N" placeholder), the commander with its colour pips, a glowing bar on
+  the edge that player sits at, and a "clockwise" marker in the middle (seats go clockwise from seat 1, which is also the turn
+  order). Labels say which side is **Top · far side** and which is **Bottom · near side**.
+- **First player**: with *Random first player* off, seat 1 is marked **1st** (the game assumes seat 1 unless you pick someone);
+  with it on, nobody is marked and the note says the first player is picked at random after Start.
+- **Rearrange**: tap a seat (it glows, the others get a dashed outline), then tap another seat to swap the two players. Tap
+  the selected seat again to cancel. A swap moves everything that belongs to the seat: name and commander (local), or member +
+  deck, guest + commander and any per-seat bracket override (playgroup). The seat list below follows, the order is saved at
+  once, and the game is created in that order, so `seat`, `firstPlayerIndex` / `first_player_index`, `turnPos`, `wentFirst`,
+  `winnerIndex` and `killedBy` all follow the new positions. Dragging isn't supported; taps are.
+- **Same code as the game**: the preview uses `boardMode()` and the same `WIDE_LAYOUTS` / `TALL_LAYOUTS` grid areas and seat
+  rotations as `renderGame()`. Upright phone with the wide layout (default): drawn in the board's own frame, i.e. how the game
+  looks with the phone on its side, top end to the left (3 players: 1 on top, 2 below; 5: 3 on top, 2 below; 6: 2×3).
+  Landscape phone / iPad: the wide layout as on screen. Wide layout switched off: the upright layout (seats on the long
+  left/right edges). It redraws on rotation / resize, when names are typed, and when the player count changes.
+- **During a game**: game menu → **Rearrange seats** shows the same table for the current game, with the first player
+  (if one was picked) marked 1st and everyone's turn position. Tap two seats to swap them. Player ids stay the same, so life,
+  commander damage, poison, tax, Monarch / Initiative, Sol Ring, brackets, the first player and the timer all stay with the
+  person; seat numbers / colours follow the position (as if the game had started in that order). The setup is updated too,
+  so **Rematch** uses the corrected order. Reloading mid-game keeps it.
+- **Data**: no new fields and no migration. Setup seat order lives where it already did (`lastSetup.seats` /
+  `groupSetups[groupId]`); saved games, backups, the offline queue and Supabase rows look exactly like games started in that order.
+- Tests: `test.mjs` checks the preview against the real board for 2–6 players on an upright iPhone (wide + wide off), an
+  iPhone in landscape, and an iPad in portrait / landscape (position, sitting edge and name per seat, 1/2, 2/2, 3/2, 3/3 rows),
+  tap-to-swap, cancel, live updates, the first-player marker, the in-game swap (state kept, first player and turn order, board
+  re-laid out, reload, saved record, Rematch) and a v1.8 game in progress. `test-online.mjs` swaps group seats (bracket
+  override moves along) and checks the uploaded row after a setup + mid-game swap. `test-stress.mjs` updates from the live
+  v1.8.0 commit mid-game and rearranges that game. `tools/shot-v19.mjs` renders `screenshots/42-*`.
+- Limits: the preview's text is always drawn upright for the person holding the phone (in the game the top row is upside
+  down for them); the bar on each seat shows which edge that player sits at. No drag and drop.

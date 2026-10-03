@@ -2,7 +2,7 @@
 'use strict';
 (function () {
   const STORE_KEY = 'edh-tracker:v1';
-  const APP_VERSION = '1.8.0';
+  const APP_VERSION = '1.9.0';
   const WUBRG = ['W', 'U', 'B', 'R', 'G'];
   const COLOR_NAME = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
   const REASON = { life: 'life total', commander: 'commander damage', poison: 'poison', conceded: 'conceded' };
@@ -57,6 +57,8 @@
     palette: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2 0-1.4-1.2-1.6-1.2-2.8 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4C21 6.4 17 3 12 3z"/><circle cx="7.5" cy="11.5" r="1.2"/><circle cx="10" cy="7.5" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>',
     bracket: '<svg viewBox="0 0 24 24"><path d="M3.5 17.5a8.5 8.5 0 0 1 17 0"/><path d="M12 17.5l4.3-5.3"/><circle cx="12" cy="17.5" r="1.5"/><path d="M5.9 11.4l1.4 1.1M12 8.9v1.8M18.1 11.4l-1.4 1.1"/></svg>',
     link: '<svg viewBox="0 0 24 24" class="ico-link"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4L11.6 6"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1.6-1.6"/></svg>',
+    cw: '<svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M18.3 2.8l-.6 4.3-4.3-.6"/></svg>',
+    seats: '<svg viewBox="0 0 24 24"><rect x="6.5" y="8" width="11" height="8" rx="2"/><circle cx="9" cy="4.3" r="1.6"/><circle cx="15" cy="4.3" r="1.6"/><circle cx="9" cy="19.7" r="1.6"/><circle cx="15" cy="19.7" r="1.6"/></svg>',
     solring: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="14.5" rx="8" ry="5.8"/><ellipse cx="12" cy="14.5" rx="4.2" ry="2.6"/><path d="M12 3.2l2.3 3.1L12 8.7 9.7 6.3z"/></svg>',
   };
   // commander colour identity as a CSS gradient (deck accent strips, commander bars)
@@ -279,7 +281,7 @@
     ({ play: renderPlay, commanders: renderCommanders, stats: renderStats, history: renderHistory, settings: renderSettings })[tab](v);
   }
   function setTab(t) {
-    tab = t; histLimit = 50; renderTab(); window.scrollTo(0, 0);
+    tab = t; histLimit = 50; tpSel = null; renderTab(); window.scrollTo(0, 0);
     const v = $('#view'); v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); // gentle view-in (disabled under reduced motion)
   }
 
@@ -312,6 +314,7 @@
     </section>
     <section class="card">
       <div class="card-title">Seats <span class="muted small">clockwise around the table</span></div>
+      ${setupPreviewHtml()}
       ${s.seats.slice(0, s.count).map((seat, i) => {
         const c = getCmd(seat.commanderId);
         return `<div class="seat-row">
@@ -326,6 +329,103 @@
     </section>
     <button class="btn primary big block start-btn" data-act="startGame">${I.play}Start game</button>
     ${installHint()}`;
+  }
+
+  // ---------- v1.9: table preview (seat positions exactly as the game board lays them out) ----------
+  // Uses the same boardMode() + WIDE_LAYOUTS / TALL_LAYOUTS as renderGame(), so the picture always matches the game.
+  // Tap a seat, then another, to swap them (setup: the seats themselves; in game: the players, state kept).
+  let tpSel = null; // selected seat index in the preview (null = none)
+  const SIT_EDGE = { 0: 'b', 180: 't', 90: 'l', '-90': 'r' }; // where a seat's player sits (panel bottom after rotation)
+  function previewSpec(n) {
+    const M = boardMode(); const L = (M.wide ? WIDE_LAYOUTS : TALL_LAYOUTS)[n];
+    const w = M.rot === 90 ? innerHeight : innerWidth, h = M.rot === 90 ? innerWidth : innerHeight;
+    const ar = Math.round((M.wide ? Math.min(2.2, Math.max(1.35, w / h)) : Math.min(0.75, Math.max(0.6, w / h))) * 1000) / 1000;
+    const caption = M.key === 'wide90' ? 'Phone on its side, top end to the left' : M.key === 'wide' ? 'As on the game screen' : 'Phone upright';
+    return { M, L, ar, caption };
+  }
+  // seats: [{ name, ph (placeholder), cmd, colors, guest }], opts: { sel, first (index | -1), ords (show 1st..Nth), note }
+  function tablePreviewHtml(seats, opts = {}) {
+    const n = seats.length; const { M, L, ar, caption } = previewSpec(n);
+    const first = opts.first == null ? -1 : opts.first; const pos = first >= 0 ? turnPositions(n, first) : null;
+    const side = (rot) => ({ t: 'top', b: 'bottom', l: 'left', r: 'right' }[SIT_EDGE[rot]]);
+    const cells = seats.map((s, i) => {
+      const [r, c, span, rot] = L.seats[i]; const sel = opts.sel === i;
+      const k = pos ? pos[i] : 0; const isFirst = k === 1;
+      const nm = s.name || s.ph;
+      return `<button type="button" class="tp-seat seat-${i} sit-${SIT_EDGE[rot]} ${sel ? 'sel' : ''} ${opts.sel != null && !sel ? 'target' : ''}" style="grid-area:${r}/${c}/span 1/span ${span}" data-tp="${i}" data-rot="${rot}" aria-pressed="${sel}"
+        aria-label="Seat ${i + 1}, ${esc(nm)}${s.cmd ? ', ' + esc(s.cmd) : ''}, ${side(rot)} side${isFirst ? ', goes first' : k ? `, ${ordinal(k)} to play` : ''}. ${sel ? 'Selected: tap another seat to swap, or tap again to cancel.' : opts.sel != null ? `Tap to swap with seat ${opts.sel + 1}.` : 'Tap, then tap another seat to swap.'}">
+        <span class="tp-in"><span class="tp-top"><span class="seat-dot tp-dot">${i + 1}</span><b class="tp-name ellipsis ${s.name ? '' : 'ph'}">${esc(nm)}</b>${isFirst ? `<span class="tp-first">${I.first}<span>1st</span></span>` : k && opts.ords ? `<span class="tp-ord">${ordinal(k)}</span>` : ''}</span>
+        <span class="tp-cmd">${s.cmd ? `<span class="pips">${pips(s.colors || [])}</span><span class="ellipsis">${esc(s.cmd)}</span>` : `<span class="ellipsis ph">${s.guest ? 'Guest' : 'No commander'}</span>`}</span></span></button>`;
+    }).join('');
+    const sideLbl = (t, cls) => `<div class="tp-side ${cls}">${t}</div>`;
+    const status = opts.sel != null ? `Seat ${opts.sel + 1} selected — now tap where they go` : 'Tap a seat, then another, to swap them';
+    return `<div class="tp" data-layout="${M.key}" data-n="${n}">
+      ${M.wide ? sideLbl(`${I.up}<span><b>Top</b> · far side</span>`, 'tp-far') : sideLbl('<span><b>Top</b> of the phone</span>', 'tp-far')}
+      <div class="tp-table ${M.wide ? 'wide' : 'tall'}" style="--ar:${ar};grid-template-rows:repeat(${L.rows},1fr);grid-template-columns:repeat(${L.cols},1fr)" role="group" aria-label="Table preview, seats clockwise from seat 1">
+        ${cells}<span class="tp-center" aria-hidden="true" title="clockwise">${I.cw}<small>clockwise</small></span></div>
+      ${M.wide ? sideLbl(`${I.down}<span><b>Bottom</b> · near side</span>`, 'tp-near') : sideLbl('<span><b>Bottom</b> of the phone</span>', 'tp-near')}
+      <p class="tp-cap"><span class="tp-status" role="status">${status}</span><span class="tp-meta">${esc(caption)}${opts.note ? ' · ' + opts.note : ''}</span></p>
+    </div>`;
+  }
+  // setup seats -> preview seats (local or playgroup)
+  function setupPreviewSeats() {
+    const s = getSetup();
+    if (gm()) return groupSeats().slice(0, s.count).map((seat, i) => {
+      const ph = `Player ${i + 1}`;
+      if (seat.kind === 'member') { const m = memberById(seat.userId); const d = deckById(seat.deckId); return { name: m ? m.display_name : '', ph, cmd: d ? deckLabel(d) : '', colors: d ? d.colors : [] }; }
+      if (seat.kind === 'guest') { const c = seat.commander; return { name: seat.name, ph, guest: true, cmd: c && c.name ? (c.partner ? `${c.name} + ${c.partner}` : c.name) : '', colors: c ? c.colors : [] }; }
+      return { name: '', ph, cmd: '', colors: [] };
+    });
+    return s.seats.slice(0, s.count).map((seat, i) => { const c = getCmd(seat.commanderId); return { name: seat.name.trim(), ph: `Player ${i + 1}`, cmd: c ? cmdLabel(c) : '', colors: c ? c.colors : [] }; });
+  }
+  function setupPreviewHtml() {
+    const s = getSetup(); if (tpSel != null && tpSel >= s.count) tpSel = null;
+    const random = data.settings.randomFirst;
+    return tablePreviewHtml(setupPreviewSeats(), { sel: tpSel, first: random ? -1 : 0, note: random ? '1st player: random after Start' : 'seat 1 goes first unless you pick another' });
+  }
+  function repaintSetupPreview() { const el = $('#view .tp'); if (el) el.outerHTML = setupPreviewHtml(); }
+  function flashSeats(root, a, b) { [a, b].forEach((i) => { const el = root.querySelector(`.tp-seat[data-tp="${i}"]`); if (el) el.classList.add('swapped'); }); }
+  // swap two setup seats: names / commanders (local) or member / deck / guest / bracket override (playgroup)
+  function swapSetupSeats(a, b) {
+    const arr = gm() ? groupSeats() : getSetup().seats;
+    [arr[a], arr[b]] = [arr[b], arr[a]]; save();
+  }
+  function tapSetupSeat(i) {
+    if (tpSel == null) { tpSel = i; repaintSetupPreview(); return; }
+    if (tpSel === i) { tpSel = null; repaintSetupPreview(); return; }
+    const a = tpSel; tpSel = null; swapSetupSeats(a, i);
+    const y = window.scrollY; renderTab(); window.scrollTo(0, y);
+    flashSeats($('#view'), a, i); toast(`Swapped seats ${a + 1} and ${i + 1}`);
+  }
+  // in game (from the game menu): reorder the players; ids stay, so life, damage, counters, monarch and the first
+  // player all follow the person. seat = new position (seat colour + number), like a game started in that order.
+  function swapGameSeats(a, b) {
+    const g = G(); if (!g || a === b) return;
+    [g.players[a], g.players[b]] = [g.players[b], g.players[a]];
+    g.players.forEach((p, i) => { p.seat = i; });
+    const s = getSetup(); // keep the setup in step so "Rematch" / the next game uses the corrected order
+    if (s.count === g.players.length) { if (g.groupId && gm() && cloud.groupId() === g.groupId) { const gs = groupSeats(); [gs[a], gs[b]] = [gs[b], gs[a]]; } else if (!g.groupId) [s.seats[a], s.seats[b]] = [s.seats[b], s.seats[a]]; }
+    save(true); renderGame();
+  }
+  function gamePreviewHtml(sel) {
+    const g = G(); const fi = g.players.findIndex((p) => p.id === g.firstPlayerId);
+    return tablePreviewHtml(g.players.map((p) => ({ name: p.name, ph: p.name, cmd: p.commanderName ? (p.partnerName ? `${p.commanderName} + ${p.partnerName}` : p.commanderName) : '', colors: p.colors, guest: p.kind === 'guest' })),
+      { sel, first: fi, ords: fi >= 0, note: fi >= 0 ? 'turns go clockwise from 1st' : 'no first player picked yet' });
+  }
+  function openSeatSwap() {
+    const g = G(); if (!g) return; let sel = null;
+    const ov = openSheet(`<div class="sheet-head"><div><h2>Seats</h2><div class="muted small">Swap seats without losing anything</div></div><button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+      <div class="sheet-body"><div data-role="tp"></div><button class="btn primary block" data-close>Done</button></div>`, { cls: 'seat-swap' });
+    const box = ov.querySelector('[data-role=tp]');
+    const draw = () => { if (!G()) return; box.innerHTML = gamePreviewHtml(sel); };
+    ov._refresh = draw;
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tp]'); if (!b) return; const i = +b.dataset.tp;
+      if (sel == null || sel === i) { sel = sel === i ? null : i; draw(); return; }
+      const a = sel; sel = null; swapGameSeats(a, i); draw(); flashSeats(box, a, i);
+      toast(`Swapped ${G().players[i].name} and ${G().players[a].name}`);
+    });
+    draw();
   }
 
   // setup: the bracket button next to a seat's commander / deck
@@ -603,6 +703,7 @@
     $$('.overlay').forEach((ov) => { if (!ov._pid) return; const fr = ov.querySelector('.rot-frame'); const r = seatRot(ov._pid); fr.style.setProperty('--rot', r + 'deg'); fr.classList.toggle('side', Math.abs(r) === 90); });
   }
   window.addEventListener('resize', onBoardResize);
+  window.addEventListener('resize', () => { if ($('#game').hidden && tab === 'play') repaintSetupPreview(); }); // v1.9: preview follows rotation / iPad resize
   window.addEventListener('orientationchange', () => setTimeout(onBoardResize, 300));
   function renderGame() {
     const g = G(); const M = boardMode(); const L = (M.wide ? WIDE_LAYOUTS : TALL_LAYOUTS)[g.players.length]; const hint = !hintSeen();
@@ -870,6 +971,7 @@
           <button class="mtile t-orange" data-ga="d20"><b>${I.d20}</b><span>Roll d20</span></button>
           <button class="mtile t-gold" data-ga="coin"><b>${I.coin}</b><span>Flip coin</span></button>
         </div>
+        <button class="btn ghost block seats-btn" data-ga="seats">${I.seats}Rearrange seats</button>
         <button class="btn gold block big" data-ga="end">${I.trophy} End game & save</button>
         <div class="row2"><button class="btn ghost" data-ga="restart">Restart</button><button class="btn ghost" data-ga="exit">Exit to menu</button></div>
         <button class="btn ghost danger-text block" data-ga="abandon">Abandon game</button>
@@ -884,6 +986,7 @@
       const b = e.target.closest('[data-ga]'); if (!b) return;
       const a = b.dataset.ga;
       if (a === 'first') { closeOverlay(ov); pickFirstPlayer(); }
+      else if (a === 'seats') { closeOverlay(ov); openSeatSwap(); }
       else if (a === 'd6' || a === 'd20' || a === 'coin') showRoll(a);
       else if (a === 'end') { closeOverlay(ov); openEndGame(); }
       else if (a === 'exit') { closeOverlay(ov); closeGame(); }
@@ -1850,6 +1953,7 @@
     </section>
     <section class="card">
       <div class="card-title">Seats <span class="muted small">members or guests, clockwise</span></div>
+      ${setupPreviewHtml()}
       ${seats.slice(0, s.count).map((seat, i) => {
         const sum = seatSummary(seat);
         return `<div class="seat-row group-seat" data-seat="${i}"><span class="seat-dot seat-${i}">${i + 1}</span>
@@ -2177,16 +2281,17 @@
     displayInfo: () => openDisplayInfo(),
   };
   document.addEventListener('click', (e) => {
+    const tp = e.target.closest('#view .tp-seat[data-tp]'); if (tp) { e.preventDefault(); tapSetupSeat(+tp.dataset.tp); return; }
     const el = e.target.closest('[data-act]'); if (!el) return;
     const fn = ACTIONS[el.dataset.act]; if (fn) { e.preventDefault(); fn(el, e); }
   });
   const BINDS = {
-    seatName: (el) => { getSetup().seats[+el.dataset.i].name = el.value; save(); },
+    seatName: (el) => { getSetup().seats[+el.dataset.i].name = el.value; save(); repaintSetupPreview(); },
     customLife: (el) => {
       const n = parseInt(el.value, 10);
       if (n > 0 && n < 1000) { getSetup().life = n; save(); $$('#life-seg button').forEach((b) => b.classList.toggle('on', +b.dataset.v === n)); el.classList.toggle('on', !LIFE_PRESETS.includes(n)); }
     },
-    randomFirst: (el) => { data.settings.randomFirst = el.checked; save(); },
+    randomFirst: (el) => { data.settings.randomFirst = el.checked; save(); repaintSetupPreview(); },
     wideLayout: (el) => { try { localStorage.setItem(WIDE_KEY, el.checked ? '1' : '0'); } catch (e) { /* private mode */ } },
     spinClock: (el) => { data.settings.spinClock = el.checked; save(); const bd = $('#board'); if (bd) bd.classList.toggle('no-spin', !el.checked); },
     wakeLock: (el) => { data.settings.wakeLock = el.checked; save(); },

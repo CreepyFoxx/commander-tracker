@@ -924,3 +924,54 @@ div.empty .btn { margin-top: 6px; }
 .pick-row.imp-pick svg { width: 20px; height: 20px; flex: none; }
 .ico-link { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (prefers-reduced-motion: reduce) { .imp-toggle::after { transition: none; } }
+
+/* ---------- v1.9 table preview (setup + in-game "Rearrange seats") ---------- */
+.tp { --tp-maxh: 200px; margin: 0 0 6px; }
+@media (min-width: 700px) { .tp { --tp-maxh: 250px; } }
+.tp-side { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: var(--fs-xs); color: var(--muted); line-height: 1.2; margin: 0 0 5px; }
+.tp-side.tp-near { margin: 5px 0 0; }
+.tp-side b { color: var(--text); font-weight: 700; }
+.tp-side svg { width: 13px; height: 13px; color: var(--cyan); }
+.tp-table { position: relative; display: grid; gap: 4px; padding: 5px; aspect-ratio: var(--ar); width: min(100%, calc(var(--tp-maxh) * var(--ar))); margin: 0 auto; border-radius: 18px;
+  background: radial-gradient(70% 90% at 50% 50%, rgba(47, 191, 155, .16), transparent 70%), radial-gradient(60% 80% at 10% 0%, rgba(122, 88, 255, .22), transparent 70%), #0b0918;
+  border: 1px solid var(--line2); box-shadow: inset 0 0 0 1px rgba(79, 227, 214, .06), 0 0 26px -12px rgba(79, 227, 214, .55); }
+.tp-table.tall { --tp-maxh: 330px; }
+.tp-seat { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; justify-content: center; padding: 6px 8px; border-radius: 12px; text-align: left; overflow: hidden;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--bg1) 80%, transparent), var(--bg2s)); border: 1px solid color-mix(in srgb, var(--accent-s) 30%, transparent);
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast), border-color var(--t-fast); }
+.tp-seat.sit-t { justify-content: flex-start; } .tp-seat.sit-b { justify-content: flex-end; }
+/* the edge the player sits at (where their panel's bottom is in the game) */
+.tp-seat::after { content: ''; position: absolute; background: var(--accent-s); box-shadow: 0 0 8px var(--glow-s); border-radius: 3px; pointer-events: none; }
+.tp-seat.sit-b::after { left: 18%; right: 18%; bottom: 2px; height: 3px; } .tp-seat.sit-t::after { left: 18%; right: 18%; top: 2px; height: 3px; }
+.tp-seat.sit-l::after { top: 18%; bottom: 18%; left: 2px; width: 3px; } .tp-seat.sit-r::after { top: 18%; bottom: 18%; right: 2px; width: 3px; }
+.tp-in { display: flex; flex-direction: column; gap: 3px; min-width: 0; width: 100%; }
+.tp-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tp-dot { width: 20px; height: 20px; font-size: 11px; box-shadow: 0 0 10px -2px var(--glow-s); }
+.tp-name { font-size: var(--fs-sm); font-weight: 700; flex: 1; letter-spacing: -.01em; }
+.tp-seat .ph { color: var(--faint); font-weight: 500; }
+.tp-cmd { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 11px; color: var(--muted); line-height: 1.25; }
+.tp-cmd .pips { gap: 2px; } .tp-cmd .pip { width: 7px; height: 7px; }
+.tp-first, .tp-ord { flex: none; display: inline-flex; align-items: center; gap: 2px; font: 700 10px/1 var(--font-num); padding: 3px 5px; border-radius: 6px; }
+.tp-first { color: var(--gold); background: rgba(246, 200, 95, .16); box-shadow: inset 0 0 0 1px rgba(246, 200, 95, .35); }
+.tp-first svg { width: 10px; height: 10px; }
+.tp-ord { color: var(--muted); background: rgba(255, 255, 255, .07); }
+.tp-seat:active { transform: scale(.97); }
+.tp-seat.sel { border-color: var(--cyan); transform: scale(.97); box-shadow: 0 0 0 2px var(--cyan), 0 0 22px -2px rgba(79, 227, 214, .7); }
+.tp-seat.target { border-style: dashed; border-color: rgba(79, 227, 214, .55); }
+.tp-seat.swapped { animation: tp-swap .6s var(--ease); }
+@keyframes tp-swap { 0% { box-shadow: 0 0 0 2px var(--cyan), 0 0 26px rgba(79, 227, 214, .9); transform: scale(.94); } 100% { box-shadow: none; transform: none; } }
+.tp-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px 3px 5px; border-radius: 999px; pointer-events: none;
+  background: rgba(14, 11, 30, .92); border: 1px solid var(--line2); color: var(--cyan); box-shadow: 0 0 14px -4px rgba(79, 227, 214, .7); }
+.tp-center svg { width: 14px; height: 14px; }
+.tp-center small { font-size: 10px; font-weight: 600; color: var(--muted); }
+.tp-cap { margin: 8px 0 4px; display: grid; gap: 2px; text-align: center; }
+.tp-status { font-size: var(--fs-sm); font-weight: 600; color: var(--accent-text); }
+.tp-meta { font-size: var(--fs-xs); color: var(--faint); }
+.seats-btn svg { width: 20px; height: 20px; margin-right: 6px; }
+.seat-swap .tp { margin-bottom: 12px; }
+@media (prefers-reduced-motion: reduce) { .tp-seat, .tp-seat.swapped { transition: none; animation: none; } }
+.tp[data-n="5"] .tp-first > span, .tp[data-n="6"] .tp-first > span { display: none; }
+.tp[data-n="5"] .tp-first, .tp[data-n="6"] .tp-first { padding: 3px; }
+.tp[data-n="5"] .tp-seat, .tp[data-n="6"] .tp-seat { padding: 6px 6px; } .tp[data-n="5"] .tp-top, .tp[data-n="6"] .tp-top { gap: 4px; }
+.tp-table.tall .tp-seat.sit-l, .tp-table.tall .tp-seat.sit-r { justify-content: flex-start; }
+.tp-table.tall .tp-center { padding: 4px; } .tp-table.tall .tp-center small { display: none; }
